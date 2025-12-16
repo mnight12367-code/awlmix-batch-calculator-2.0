@@ -187,16 +187,26 @@ if st.button("Calculate rework plan"):
 
     c1, c2, c3 = st.columns(3)
     c1.metric("Max safe reuse (fraction)", f"{max_f:.4f}")
-    c2.metric("Max safe reuse (%)", f"{max_f*100:.2f}%")
+ safe_pct_display = min(100.0, max_f * 100)
+
+c2.metric("Max safe reuse (%)", f"{safe_pct_display:.2f}%")
+
+if max_f >= 1.0:
+    c3.metric("Limiting ingredient", "None (100% OK)")
+    st.success("All rework can be used safely (100%). You are under-target on every shared ingredient.")
+else:
     c3.metric("Limiting ingredient", limiting_ing)
+
 
     with st.expander("See limiting ratios (Target / Rework)"):
         st.dataframe(limits_df, use_container_width=True)
 
-   if mode == "Auto (max safe)":
-    reuse_pct = min(100.0, max_f * 100)
+    # --- Choose reuse % ---
+    if mode == "Auto (max safe)":
+        reuse_pct = min(100.0, max_f * 100)
     else:
         reuse_pct = manual_reuse_pct
+
 
     reuse_fraction = reuse_pct / 100.0
     st.write(f"**Reuse selected:** {reuse_pct:.2f}%")
@@ -229,5 +239,6 @@ if st.button("Calculate rework plan"):
         file_name="awlmix_rework_plan.csv",
         mime="text/csv"
     )
+
 
 
