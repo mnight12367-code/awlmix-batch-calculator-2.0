@@ -183,20 +183,19 @@ if st.button("Calculate rework plan"):
         st.error("Target total must be greater than zero.")
         st.stop()
 
-    max_f, limiting_ing, limits_df = compute_max_safe_fraction(rework_dict, target_dict)
+     max_f, limiting_ing, limits_df = compute_max_safe_fraction(rework_dict, target_dict)
 
     c1, c2, c3 = st.columns(3)
     c1.metric("Max safe reuse (fraction)", f"{max_f:.4f}")
- safe_pct_display = min(100.0, max_f * 100)
 
-c2.metric("Max safe reuse (%)", f"{safe_pct_display:.2f}%")
+    safe_pct_display = min(100.0, max_f * 100)
+    c2.metric("Max safe reuse (%)", f"{safe_pct_display:.2f}%")
 
-if max_f >= 1.0:
-    c3.metric("Limiting ingredient", "None (100% OK)")
-    st.success("All rework can be used safely (100%). You are under-target on every shared ingredient.")
-else:
-    c3.metric("Limiting ingredient", limiting_ing)
-
+    if max_f >= 1.0:
+        c3.metric("Limiting ingredient", "None (100% OK)")
+        st.success("All rework can be used safely (100%). You are under-target on every shared ingredient.")
+    else:
+        c3.metric("Limiting ingredient", limiting_ing)
 
     with st.expander("See limiting ratios (Target / Rework)"):
         st.dataframe(limits_df, use_container_width=True)
@@ -206,7 +205,6 @@ else:
         reuse_pct = min(100.0, max_f * 100)
     else:
         reuse_pct = manual_reuse_pct
-
 
     reuse_fraction = reuse_pct / 100.0
     st.write(f"**Reuse selected:** {reuse_pct:.2f}%")
@@ -227,7 +225,7 @@ else:
         st.error(
             "Over-target detected (negative add-back). "
             "This reuse % is NOT safe because you can’t subtract material.\n"
-            f"Reduce reuse % to ≤ {max_f*100:.2f}% (limited by {limiting_ing})."
+            f"Reduce reuse % to ≤ {min(100.0, max_f*100):.2f}% (limited by {limiting_ing})."
         )
         st.dataframe(over_df[["Ingredient", "Target_g", "Used_from_Rework_g", "Add_Back_g"]], use_container_width=True)
 
@@ -239,6 +237,3 @@ else:
         file_name="awlmix_rework_plan.csv",
         mime="text/csv"
     )
-
-
-
