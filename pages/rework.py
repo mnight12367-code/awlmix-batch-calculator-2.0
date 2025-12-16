@@ -193,8 +193,8 @@ if st.button("Calculate rework plan"):
     with st.expander("See limiting ratios (Target / Rework)"):
         st.dataframe(limits_df, use_container_width=True)
 
-    if mode == "Auto (max safe)":
-        reuse_pct = max_f * 100
+   if mode == "Auto (max safe)":
+    reuse_pct = min(100.0, max_f * 100)
     else:
         reuse_pct = manual_reuse_pct
 
@@ -229,4 +229,5 @@ if st.button("Calculate rework plan"):
         file_name="awlmix_rework_plan.csv",
         mime="text/csv"
     )
+
 
