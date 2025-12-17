@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+
 from io import BytesIO
 from datetime import datetime
 
@@ -8,7 +9,17 @@ from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 
+st.title("AWLMIX Rework → Target (Dynamic)")
 
+st.markdown("""
+This tool calculates:
+- **Maximum safe reuse %** (so no ingredient ends up over the target)
+- **Add-backs** needed to hit the target exactly
+- **Batch Ticket PDF** export
+""")
+
+
+# ---------- PDF helper ----------
 def build_rework_ticket_pdf(plan_df: pd.DataFrame, reuse_pct: float, title: str = "AWLMIX Batch Ticket - Rework") -> bytes:
     buf = BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=letter, leftMargin=36, rightMargin=36, topMargin=36, bottomMargin=36)
@@ -23,8 +34,8 @@ def build_rework_ticket_pdf(plan_df: pd.DataFrame, reuse_pct: float, title: str 
     story.append(Paragraph(f"<b>Reuse selected:</b> {reuse_pct:.2f}%", styles["Normal"]))
     story.append(Spacer(1, 12))
 
-    # Keep the PDF table focused on what operators need
     pdf_df = plan_df.copy()
+    # Format numbers for display
     for c in ["Rework_g", "Target_g", "Used_from_Rework_g", "Add_Back_g"]:
         if c in pdf_df.columns:
             pdf_df[c] = pd.to_numeric(pdf_df[c], errors="coerce").fillna(0).map(lambda x: f"{x:,.4f}")
@@ -34,7 +45,7 @@ def build_rework_ticket_pdf(plan_df: pd.DataFrame, reuse_pct: float, title: str 
 
     table_data = [cols] + pdf_df[cols].astype(str).values.tolist()
 
-    t = Table(table_data, hAlign="LEFT", colWidths=[110, 130, 120, 110])
+    t = Table(table_data, hAlign="LEFT", colWidths=[120, 130, 120, 110])
     t.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
         ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
@@ -58,14 +69,6 @@ def build_rework_ticket_pdf(plan_df: pd.DataFrame, reuse_pct: float, title: str 
     doc.build(story)
     return buf.getvalue()
 
-
-st.title("AWLMIX Rework → Target (Dynamic)")
-
-st.markdown("""
-This tool calculates:
-- **Maximum safe reuse %** (so no ingredient ends up over the target)
-- **Add-backs** needed to hit the target exactly
-""")
 
 # ---------- Load materials from CSV ----------
 @st.cache_data
@@ -100,6 +103,7 @@ except Exception as e:
     )
     st.caption(f"Debug: {e}")
 
+
 # ---------- Core logic ----------
 def compute_max_safe_fraction(rework: dict, target: dict):
     rows = []
@@ -114,12 +118,7 @@ def compute_max_safe_fraction(rework: dict, target: dict):
             continue
 
         f_i = tg / rw
-        rows.append({
-            "Ingredient": ing,
-            "Target / Rework": f_i,
-            "Target_g": tg,
-            "Rework_g": rw
-        })
+        rows.append({"Ingredient": ing, "Target / Rework": f_i, "Target_g": tg, "Rework_g": rw})
 
         if f_i < max_f:
             max_f = f_i
@@ -179,18 +178,20 @@ def collect_lines(prefix: str, n: int):
                     options=codes_list,
                     key=f"{prefix}_code_{i}"
                 )
-                name = name_map.get(code, "")
+                name = name_map.get(code, "") if code else ""
                 if name:
                     st.caption(f"Name: {name}")
             else:
                 code = st.text_input(
                     f"{prefix} MaterialCode {i+1}",
+                    placeholder="e.g. OQ8154",
                     key=f"{prefix}_code_{i}"
                 ).strip()
 
         with col_g:
+            label = f"{code} (g)" if code else f"{prefix} Ingredient {i+1} (g)"
             g = st.number_input(
-                f"{code} (g)" if code else f"{prefix} Ingredient {i+1} (g)",
+                label,
                 min_value=0.0,
                 step=1.0,
                 format="%.4f",
@@ -212,13 +213,8 @@ with st.sidebar:
 
     st.divider()
     mode = st.selectbox("Reuse mode", ["Auto (max safe)", "Manual"], index=0)
-    manual_reuse_pct = st.number_input(
-        "Manual reuse %",
-        min_value=0.0,
-        max_value=100.0,
-        value=80.0,
-        step=0.5
-    )
+    manual_reuse_pct = st.number_input("Manual reuse %", min_value=0.0, max_value=100.0, value=80.0, step=0.5)
+
 
 # ---------- Inputs ----------
 st.subheader("1) Enter Rework (Old Batch)")
@@ -229,56 +225,8 @@ st.subheader("2) Enter Target (New Batch)")
 target_dict, target_total = collect_lines("TG", n_target)
 st.write(f"**Target total:** {target_total:,.4f} g")
 
+
 # ---------- Calculate ----------
 st.subheader("3) Results")
 
-if st.button("Calculate rework plan"):
-    if rework_total <= 0 or target_total <= 0:
-        st.error("Rework and Target totals must be greater than zero.")
-        st.stop()
-
-    max_f, limiting_ing, limits_df = compute_max_safe_fraction(rework_dict, target_dict)
-
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Max safe reuse (fraction)", f"{max_f:.4f}")
-
-    safe_pct = min(100.0, max_f * 100)
-    c2.metric("Max safe reuse (%)", f"{safe_pct:.2f}%")
-
-    if max_f >= 1.0:
-        c3.metric("Limiting ingredient", "None (100% OK)")
-        st.success("All rework can be used safely (100%). You are under-target on every shared ingredient.")
-    else:
-        c3.metric("Limiting ingredient", limiting_ing)
-
-    with st.expander("See limiting ratios (Target / Rework)"):
-        st.dataframe(limits_df, use_container_width=True)
-
-    reuse_pct = safe_pct if mode == "Auto (max safe)" else manual_reuse_pct
-    reuse_fraction = reuse_pct / 100.0
-    st.write(f"**Reuse selected:** {reuse_pct:.2f}%")
-
-    plan_df = compute_plan(rework_dict, target_dict, reuse_fraction)
-        pdf_bytes = build_rework_ticket_pdf(plan_df, reuse_pct, title="AWLMIX Batch Ticket - Rework")
-    st.download_button(
-        "Download Rework Batch Ticket (PDF)",
-        data=pdf_bytes,
-        file_name="AWLMIX_Batch_Ticket_Rework.pdf",
-        mime="application/pdf"
-    )
-
-
-    s1, s2, s3 = st.columns(3)
-    s1.metric("Total from rework used (g)", f"{plan_df['Used_from_Rework_g'].sum():,.2f}")
-    s2.metric("Total add-backs (g)", f"{plan_df['Add_Back_g'].sum():,.2f}")
-    s3.metric("Target total (g)", f"{plan_df['Target_g'].sum():,.2f}")
-
-    st.dataframe(plan_df, use_container_width=True)
-
-    st.download_button(
-        "Download plan as CSV",
-        data=plan_df.to_csv(index=False).encode("utf-8"),
-        file_name="awlmix_rework_plan.csv",
-        mime="text/csv"
-    )
-
+if st.button("
