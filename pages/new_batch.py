@@ -1,6 +1,52 @@
 import streamlit as st
 import pandas as pd
 
+from io import BytesIO
+from datetime import datetime
+
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+
+def build_batch_ticket_pdf(df: pd.DataFrame, new_total: float, title: str = "AWLMIX Batch Ticket") -> bytes:
+    buf = BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=letter, leftMargin=36, rightMargin=36, topMargin=36, bottomMargin=36)
+
+    styles = getSampleStyleSheet()
+    story = []
+
+    story.append(Paragraph(title, styles["Title"]))
+    story.append(Paragraph(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}", styles["Normal"]))
+    story.append(Spacer(1, 12))
+
+    story.append(Paragraph(f"<b>Target Total:</b> {new_total:,.4f} g", styles["Normal"]))
+    story.append(Spacer(1, 12))
+
+    # Table data
+    cols = ["MaterialCode", "MaterialName", "Ratio", "New (g)"]
+    table_data = [cols] + df[cols].astype(str).values.tolist()
+
+    t = Table(table_data, hAlign="LEFT", colWidths=[90, 230, 80, 90])
+    t.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.black),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.whitesmoke, colors.white]),
+    ]))
+
+    story.append(t)
+    story.append(Spacer(1, 12))
+
+    check_sum = float(pd.to_numeric(df["New (g)"], errors="coerce").fillna(0).sum())
+    story.append(Paragraph(f"<b>Check Sum:</b> {check_sum:,.4f} g", styles["Normal"]))
+
+    doc.build(story)
+    return buf.getvalue()
+
 st.title("Dynamic Batch Ingredient Calculator (grams)")
 
 # ---------- Load materials from CSV ----------
@@ -121,7 +167,16 @@ if st.button("Calculate batch"):
 
         st.subheader("New batch results")
 
-        df = pd.DataFrame({
+df = pd.DataFrame({...})
+
+pdf_bytes = build_batch_ticket_pdf(df, new_total, title="AWLMIX Batch Ticket - New Batch")
+st.download_button(
+    "Download Batch Ticket (PDF)",
+    data=pdf_bytes,
+    file_name="AWLMIX_Batch_Ticket_New_Batch.pdf",
+    mime="application/pdf"
+)
+
             "MaterialCode": selected_codes,
             "MaterialName": selected_names,
             "Ratio": [round(r, 10) for r in ratios],
@@ -130,4 +185,5 @@ if st.button("Calculate batch"):
 
         st.dataframe(df, hide_index=True, use_container_width=True)
         st.write(f"**Check sum:** {sum(final):,.4f} g")
+
 
