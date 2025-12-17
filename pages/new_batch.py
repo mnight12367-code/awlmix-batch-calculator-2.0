@@ -167,15 +167,24 @@ if st.button("Calculate batch"):
 
         st.subheader("New batch results")
 
-df = pd.DataFrame({...})
+        df = pd.DataFrame({
+            "MaterialCode": selected_codes,
+            "MaterialName": selected_names,
+            "Ratio": [round(r, 10) for r in ratios],
+            "New (g)": [round(x, 4) for x in final],
+        })
 
-pdf_bytes = build_batch_ticket_pdf(df, new_total, title="AWLMIX Batch Ticket - New Batch")
-st.download_button(
-    "Download Batch Ticket (PDF)",
-    data=pdf_bytes,
-    file_name="AWLMIX_Batch_Ticket_New_Batch.pdf",
-    mime="application/pdf"
-)
+        st.dataframe(df, hide_index=True, use_container_width=True)
+        st.write(f"**Check sum:** {sum(final):,.4f} g")
+
+        # ---- PDF Batch Ticket डाउनलोड ----
+        pdf_bytes = build_batch_ticket_pdf(df, float(new_total), title="AWLMIX Batch Ticket - New Batch")
+        st.download_button(
+            "Download Batch Ticket (PDF)",
+            data=pdf_bytes,
+            file_name="AWLMIX_Batch_Ticket_New_Batch.pdf",
+            mime="application/pdf"
+ )
 
             "MaterialCode": selected_codes,
             "MaterialName": selected_names,
@@ -185,5 +194,6 @@ st.download_button(
 
         st.dataframe(df, hide_index=True, use_container_width=True)
         st.write(f"**Check sum:** {sum(final):,.4f} g")
+
 
 
