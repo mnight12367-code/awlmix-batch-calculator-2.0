@@ -9,6 +9,9 @@ from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 
+st.title("Dynamic Batch Ingredient Calculator (grams)")
+
+# ---------- PDF helper ----------
 def build_batch_ticket_pdf(df: pd.DataFrame, new_total: float, title: str = "AWLMIX Batch Ticket") -> bytes:
     buf = BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=letter, leftMargin=36, rightMargin=36, topMargin=36, bottomMargin=36)
@@ -20,17 +23,15 @@ def build_batch_ticket_pdf(df: pd.DataFrame, new_total: float, title: str = "AWL
     story.append(Paragraph(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}", styles["Normal"]))
     story.append(Spacer(1, 12))
 
-    story.append(Paragraph(f"<b>Target Total:</b> {new_total:,.4f} g", styles["Normal"]))
+    story.append(Paragraph(f"<b>Target Total:</b> {float(new_total):,.4f} g", styles["Normal"]))
     story.append(Spacer(1, 12))
 
-    # Table data
     cols = ["MaterialCode", "MaterialName", "Ratio", "New (g)"]
     table_data = [cols] + df[cols].astype(str).values.tolist()
 
     t = Table(table_data, hAlign="LEFT", colWidths=[90, 230, 80, 90])
     t.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
-        ("TEXTCOLOR", (0, 0), (-1, 0), colors.black),
         ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
         ("FONTSIZE", (0, 0), (-1, -1), 9),
         ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
@@ -47,27 +48,23 @@ def build_batch_ticket_pdf(df: pd.DataFrame, new_total: float, title: str = "AWL
     doc.build(story)
     return buf.getvalue()
 
-st.title("Dynamic Batch Ingredient Calculator (grams)")
 
 # ---------- Load materials from CSV ----------
 @st.cache_data
 def load_materials_csv(path: str) -> pd.DataFrame:
     df = pd.read_csv(path)
-
-    # Clean column names (remove extra spaces)
     df.columns = [c.strip() for c in df.columns]
 
-    # Required columns check
     if "MaterialCode" not in df.columns or "MaterialName" not in df.columns:
         raise ValueError("CSV must contain columns: MaterialCode, MaterialName")
 
-    # Clean values
     df["MaterialCode"] = df["MaterialCode"].astype(str).str.strip()
     df["MaterialName"] = df["MaterialName"].astype(str).str.strip()
 
     df = df.dropna(subset=["MaterialCode"])
     df = df.drop_duplicates(subset=["MaterialCode"]).sort_values("MaterialCode")
     return df
+
 
 materials_loaded = False
 codes_list = [""]
@@ -81,10 +78,10 @@ try:
 except Exception as e:
     st.warning(
         "MaterialMaster.csv not found or invalid. "
-        "Make sure MaterialMaster.csv is in the same folder as this app "
-        "and contains columns: MaterialCode, MaterialName."
+        "Make sure MaterialMaster.csv is in the project root and contains columns: MaterialCode, MaterialName."
     )
     st.caption(f"Debug: {e}")
+
 
 # ---------- Sidebar ----------
 with st.sidebar:
@@ -93,6 +90,7 @@ with st.sidebar:
     rounding = st.selectbox("Rounding", ["No rounding", "1 g", "0.1 g", "0.01 g"], index=1)
 
 round_step = 0.0 if rounding == "No rounding" else float(rounding.split()[0])
+
 
 # ---------- Inputs ----------
 st.subheader("Batch Formula (RFT)")
@@ -106,31 +104,17 @@ for i in range(int(n)):
 
     with col_code:
         if materials_loaded:
-            code = st.selectbox(
-                f"MaterialCode {i+1}",
-                options=codes_list,
-                key=f"code_{i}"
-            )
+            code = st.selectbox(f"MaterialCode {i+1}", options=codes_list, key=f"code_{i}")
             name = name_map.get(code, "") if code else ""
             if name:
                 st.caption(f"Name: {name}")
         else:
-            code = st.text_input(
-                f"MaterialCode {i+1}",
-                placeholder="e.g. OQ8154",
-                key=f"code_{i}"
-            )
+            code = st.text_input(f"MaterialCode {i+1}", placeholder="e.g. OQ8154", key=f"code_{i}")
             name = ""
 
     with col_weight:
         label = f"{code} (g)" if code else f"Ingredient {i+1} (g)"
-        g = st.number_input(
-            label,
-            min_value=0.0,
-            step=1.0,
-            format="%.4f",
-            key=f"g_{i}"
-        )
+        g = st.number_input(label, min_value=0.0, step=1.0, format="%.4f", key=f"g_{i}")
 
     selected_codes.append(code if code else f"Ingredient {i+1}")
     selected_names.append(name)
@@ -177,23 +161,14 @@ if st.button("Calculate batch"):
         st.dataframe(df, hide_index=True, use_container_width=True)
         st.write(f"**Check sum:** {sum(final):,.4f} g")
 
-        # ---- PDF Batch Ticket डाउनलोड ----
         pdf_bytes = build_batch_ticket_pdf(df, float(new_total), title="AWLMIX Batch Ticket - New Batch")
         st.download_button(
             "Download Batch Ticket (PDF)",
             data=pdf_bytes,
             file_name="AWLMIX_Batch_Ticket_New_Batch.pdf",
             mime="application/pdf"
- )
+        )
 
-            "MaterialCode": selected_codes,
-            "MaterialName": selected_names,
-            "Ratio": [round(r, 10) for r in ratios],
-            "New (g)": [round(x, 4) for x in final],
-        })
-
-        st.dataframe(df, hide_index=True, use_container_width=True)
-        st.write(f"**Check sum:** {sum(final):,.4f} g")
 
 
 
