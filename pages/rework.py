@@ -1,5 +1,63 @@
 import streamlit as st
 import pandas as pd
+from io import BytesIO
+from datetime import datetime
+
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+
+
+def build_rework_ticket_pdf(plan_df: pd.DataFrame, reuse_pct: float, title: str = "AWLMIX Batch Ticket - Rework") -> bytes:
+    buf = BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=letter, leftMargin=36, rightMargin=36, topMargin=36, bottomMargin=36)
+
+    styles = getSampleStyleSheet()
+    story = []
+
+    story.append(Paragraph(title, styles["Title"]))
+    story.append(Paragraph(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}", styles["Normal"]))
+    story.append(Spacer(1, 12))
+
+    story.append(Paragraph(f"<b>Reuse selected:</b> {reuse_pct:.2f}%", styles["Normal"]))
+    story.append(Spacer(1, 12))
+
+    # Keep the PDF table focused on what operators need
+    pdf_df = plan_df.copy()
+    for c in ["Rework_g", "Target_g", "Used_from_Rework_g", "Add_Back_g"]:
+        if c in pdf_df.columns:
+            pdf_df[c] = pd.to_numeric(pdf_df[c], errors="coerce").fillna(0).map(lambda x: f"{x:,.4f}")
+
+    cols = ["Ingredient", "Used_from_Rework_g", "Add_Back_g", "Target_g"]
+    cols = [c for c in cols if c in pdf_df.columns]
+
+    table_data = [cols] + pdf_df[cols].astype(str).values.tolist()
+
+    t = Table(table_data, hAlign="LEFT", colWidths=[110, 130, 120, 110])
+    t.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.whitesmoke, colors.white]),
+    ]))
+
+    story.append(t)
+    story.append(Spacer(1, 12))
+
+    used_sum = float(pd.to_numeric(plan_df.get("Used_from_Rework_g", 0), errors="coerce").fillna(0).sum())
+    add_sum = float(pd.to_numeric(plan_df.get("Add_Back_g", 0), errors="coerce").fillna(0).sum())
+    tgt_sum = float(pd.to_numeric(plan_df.get("Target_g", 0), errors="coerce").fillna(0).sum())
+
+    story.append(Paragraph(f"<b>Total from rework used:</b> {used_sum:,.4f} g", styles["Normal"]))
+    story.append(Paragraph(f"<b>Total add-backs:</b> {add_sum:,.4f} g", styles["Normal"]))
+    story.append(Paragraph(f"<b>Target total:</b> {tgt_sum:,.4f} g", styles["Normal"]))
+
+    doc.build(story)
+    return buf.getvalue()
+
 
 st.title("AWLMIX Rework → Target (Dynamic)")
 
@@ -201,6 +259,14 @@ if st.button("Calculate rework plan"):
     st.write(f"**Reuse selected:** {reuse_pct:.2f}%")
 
     plan_df = compute_plan(rework_dict, target_dict, reuse_fraction)
+        pdf_bytes = build_rework_ticket_pdf(plan_df, reuse_pct, title="AWLMIX Batch Ticket - Rework")
+    st.download_button(
+        "Download Rework Batch Ticket (PDF)",
+        data=pdf_bytes,
+        file_name="AWLMIX_Batch_Ticket_Rework.pdf",
+        mime="application/pdf"
+    )
+
 
     s1, s2, s3 = st.columns(3)
     s1.metric("Total from rework used (g)", f"{plan_df['Used_from_Rework_g'].sum():,.2f}")
@@ -215,3 +281,4 @@ if st.button("Calculate rework plan"):
         file_name="awlmix_rework_plan.csv",
         mime="text/csv"
     )
+
