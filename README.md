@@ -104,3 +104,4 @@ This project is intentionally built to:
 - Support gradual ERP evolution
 
 Add project README and architecture overview
+
