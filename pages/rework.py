@@ -1,339 +1,211 @@
-import os
 import streamlit as st
 import pandas as pd
 
-from io import BytesIO
-from datetime import datetime
+st.set_page_config(page_title="AWLMIX Rework Calculator", layout="wide")
+st.title("AWLMIX Rework → Target Calculator")
 
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import letter
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+st.markdown("""
+This tool calculates:
+- **Maximum safe reuse %** (so no ingredient ends up over the target)
+- **Add-backs** needed to hit the target exactly (by ingredient)
+""")
 
-st.title("Dynamic Batch Ingredient Calculator (grams)")
+# ----------------------------
+# Core logic
+# ----------------------------
+def compute_max_safe_fraction(rework: dict, target: dict) -> tuple[float, str, pd.DataFrame]:
+    """
+    Max safe fraction f is the minimum across shared ingredients:
+        f <= target_i / rework_i   for all i where rework_i > 0 and target_i is defined.
 
-# ---------- PDF helper ----------
-def build_batch_ticket_pdf(df: pd.DataFrame, new_total: float, title: str = "AWLMIX Batch Ticket") -> bytes:
-    buf = BytesIO()
-    doc = SimpleDocTemplate(
-        buf,
-        pagesize=letter,
-        leftMargin=36,
-        rightMargin=36,
-        topMargin=36,
-        bottomMargin=36
-    )
+    Returns:
+      (max_f, limiting_ingredient, limits_df)
+    """
+    rows = []
+    max_f = float("inf")
+    limiting = None
 
-    styles = getSampleStyleSheet()
-    story = []
+    shared = sorted(set(rework.keys()) & set(target.keys()))
+    for ing in shared:
+        rw = float(rework.get(ing, 0) or 0)
+        tg = float(target.get(ing, 0) or 0)
 
-    story.append(Paragraph(title, styles["Title"]))
-    story.append(Paragraph(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}", styles["Normal"]))
-    story.append(Spacer(1, 12))
+        if rw <= 0:
+            continue  # doesn't constrain
 
-    story.append(Paragraph(f"<b>Target Total:</b> {float(new_total):,.4f} g", styles["Normal"]))
-    story.append(Spacer(1, 12))
+        f_i = tg / rw
+        rows.append({"Ingredient": ing, "Target / Rework": f_i, "Target_g": tg, "Rework_g": rw})
 
-    cols = ["MaterialCode", "MaterialName", "Ratio", "New (g)"]
-    table_data = [cols] + df[cols].astype(str).values.tolist()
+        if f_i < max_f:
+            max_f = f_i
+            limiting = ing
 
-    t = Table(table_data, hAlign="LEFT", colWidths=[90, 230, 80, 90])
-    t.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
-        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("FONTSIZE", (0, 0), (-1, -1), 9),
-        ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.whitesmoke, colors.white]),
-    ]))
+    limits_df = pd.DataFrame(rows).sort_values("Target / Rework")
+    if max_f == float("inf"):
+        max_f = 0.0
+        limiting = "N/A"
 
-    story.append(t)
-    story.append(Spacer(1, 12))
-
-    check_sum = float(pd.to_numeric(df["New (g)"], errors="coerce").fillna(0).sum())
-    story.append(Paragraph(f"<b>Check Sum:</b> {check_sum:,.4f} g", styles["Normal"]))
-
-    story.append(Spacer(1, 14))
-
-    # ---- QC Results (Operator Fill) ----
-    story.append(Paragraph("<b>QC Results (Operator Fill)</b>", styles["Normal"]))
-    story.append(Spacer(1, 6))
-
-    qc_table = Table(
-        [
-            ["Last Batch ΔE00 (CIEDE2000):", "__________"],
-            ["Last Batch Δa:", "__________"],
-            ["Last Batch Δb:", "__________"],
-        ],
-        hAlign="LEFT",
-        colWidths=[220, 220],
-    )
-
-    qc_table.setStyle(TableStyle([
-        ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
-        ("FONTSIZE", (0, 0), (-1, -1), 10),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("ROWBACKGROUNDS", (0, 0), (-1, -1), [colors.whitesmoke, colors.white]),
-        ("LEFTPADDING", (0, 0), (-1, -1), 6),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 6),
-        ("TOPPADDING", (0, 0), (-1, -1), 6),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
-    ]))
-
-    story.append(qc_table)
-
-    doc.build(story)
-    return buf.getvalue()
+    return max_f, limiting, limits_df
 
 
-# ---------- Load materials from CSV ----------
-@st.cache_data
-def load_materials_csv(path: str) -> pd.DataFrame:
-    df = pd.read_csv(path)
-    df.columns = [c.strip() for c in df.columns]
+def compute_plan(rework: dict, target: dict, reuse_fraction: float) -> pd.DataFrame:
+    """
+    For chosen reuse_fraction f:
+      used_from_rework_i = f * rework_i
+      add_back_i = target_i - used_from_rework_i
 
-    if "MaterialCode" not in df.columns or "MaterialName" not in df.columns:
-        raise ValueError("CSV must contain columns: MaterialCode, MaterialName")
+    If add_back_i < 0 -> over-target problem (cannot subtract).
+    """
+    all_ings = sorted(set(rework.keys()) | set(target.keys()))
+    rows = []
 
-    df["MaterialCode"] = df["MaterialCode"].astype(str).str.strip()
-    df["MaterialName"] = df["MaterialName"].astype(str).str.strip()
+    for ing in all_ings:
+        rw = float(rework.get(ing, 0) or 0)
+        tg = float(target.get(ing, 0) or 0)
+        used = reuse_fraction * rw
+        add = tg - used
 
-    df = df.dropna(subset=["MaterialCode"])
-    df = df.drop_duplicates(subset=["MaterialCode"]).sort_values("MaterialCode")
-    return df
-
-
-# ---------- Reference TXT loaders (optional BOM compare) ----------
-@st.cache_data
-def load_ref_txt(path: str, cols: list[str]) -> pd.DataFrame:
-    if not os.path.exists(path):
-        return pd.DataFrame(columns=cols)
-    df = pd.read_csv(path, header=None, names=cols)
-    for c in df.columns:
-        if df[c].dtype == object:
-            df[c] = df[c].astype(str).str.replace('"', "", regex=False).str.strip()
-    return df
-
-
-@st.cache_data
-def load_reference_tables() -> dict[str, pd.DataFrame]:
-    ref = {}
-    ref["product_master"] = load_ref_txt("ProductMaster.txt", ["ProductID", "ProductCode", "ProductName"])
-    ref["usage"] = load_ref_txt("ProductMaterialUsage.txt", ["RowID", "ProductID", "MaterialID", "UsageFraction"])
-    ref["units"] = load_ref_txt("ProductUnits.txt", ["RowID", "ProductID", "UnitType"])
-    ref["wt"] = load_ref_txt("ProductWeightTargets.txt", ["RowID", "ProductID", "TargetWeightLB", "Notes"])
-    ref["material_master_ref"] = load_ref_txt("MaterialMaster.txt", ["MaterialID", "MaterialCode", "MaterialName"])
-    return ref
-
-
-def build_reference_bom(ref: dict[str, pd.DataFrame], product_id: int) -> pd.DataFrame:
-    usage = ref["usage"]
-    mat = ref["material_master_ref"]
-
-    if usage.empty or mat.empty:
-        return pd.DataFrame(columns=["MaterialCode", "MaterialName", "RefPercent"])
-
-    usage = usage.copy()
-    usage["ProductID"] = pd.to_numeric(usage["ProductID"], errors="coerce")
-    usage = usage[usage["ProductID"] == product_id]
-
-    bom = usage.merge(mat, on="MaterialID", how="left")
-    bom["UsageFraction"] = pd.to_numeric(bom["UsageFraction"], errors="coerce").fillna(0.0)
-    bom["RefPercent"] = bom["UsageFraction"] * 100.0
-
-    bom = bom.groupby(["MaterialCode", "MaterialName"], as_index=False)["RefPercent"].sum()
-    bom = bom.sort_values("RefPercent", ascending=False).reset_index(drop=True)
-    return bom
-
-
-# ---------- Initialize material dropdown ----------
-materials_loaded = False
-codes_list = [""]
-name_map = {}
-
-try:
-    materials = load_materials_csv("MaterialMaster.csv")
-    codes_list = [""] + materials["MaterialCode"].tolist()
-    name_map = dict(zip(materials["MaterialCode"], materials["MaterialName"]))
-    materials_loaded = True
-except Exception as e:
-    st.warning(
-        "MaterialMaster.csv not found or invalid. "
-        "Make sure MaterialMaster.csv is in the project root and contains columns: MaterialCode, MaterialName."
-    )
-    st.caption(f"Debug: {e}")
-
-
-# ---------- Sidebar ----------
-with st.sidebar:
-    st.header("Settings")
-
-    n = st.number_input("Number of ingredients", min_value=1, max_value=50, value=4, step=1)
-    rounding = st.selectbox("Rounding", ["No rounding", "1 g", "0.1 g", "0.01 g"], index=1)
-
-    st.divider()
-    st.subheader("Reference (optional)")
-
-    tol_pct = st.slider(
-        "Reference tolerance (±%)",
-        min_value=0.0,
-        max_value=10.0,
-        value=0.50,
-        step=0.05,
-        help="Highlights ingredients where |Manual% - Ref%| is greater than this tolerance."
-    )
-
-    ref = load_reference_tables()
-    pm = ref["product_master"]
-    pu = ref["units"]
-    wt = ref["wt"]
-
-    ref_product_id = None
-
-    if pm.empty:
-        st.caption("Reference files not found (ProductMaster.txt / ProductMaterialUsage.txt / MaterialMaster.txt).")
-    else:
-        ref_product_code = st.selectbox(
-            "Reference ProductCode",
-            options=[""] + pm["ProductCode"].dropna().unique().tolist(),
-            index=0
-        )
-
-        if ref_product_code:
-            ref_product_id = int(pd.to_numeric(
-                pm.loc[pm["ProductCode"] == ref_product_code, "ProductID"].iloc[0],
-                errors="coerce"
-            ))
-
-            unit_options = pu.loc[pu["ProductID"] == ref_product_id, "UnitType"].dropna().unique().tolist()
-            _ = st.selectbox("Reference Unit", options=[""] + unit_options, index=0)
-
-            wt_row = wt.loc[wt["ProductID"] == ref_product_id]
-            if not wt_row.empty:
-                target_lb = float(pd.to_numeric(wt_row["TargetWeightLB"], errors="coerce").fillna(0).iloc[0])
-                st.caption(f"Target weight (lb): {target_lb:,.4f}")
-
-round_step = 0.0 if rounding == "No rounding" else float(rounding.split()[0])
-
-
-# ---------- Inputs ----------
-st.subheader("Batch Formula (RFT)")
-
-selected_codes: list[str] = []
-selected_names: list[str] = []
-old_g: list[float] = []
-
-for i in range(int(n)):
-    col_code, col_weight = st.columns([1.3, 1.0])
-
-    with col_code:
-        if materials_loaded:
-            code = st.selectbox(f"MaterialCode {i+1}", options=codes_list, key=f"code_{i}")
-            name = name_map.get(code, "") if code else ""
-            if name:
-                st.caption(f"Name: {name}")
-        else:
-            code = st.text_input(f"MaterialCode {i+1}", placeholder="e.g. OQ8154", key=f"code_{i}")
-            name = ""
-
-    with col_weight:
-        label = f"{code} (g)" if code else f"Ingredient {i+1} (g)"
-        g = st.number_input(label, min_value=0.0, step=1.0, format="%.4f", key=f"g_{i}")
-
-    selected_codes.append(code if code else f"Ingredient {i+1}")
-    selected_names.append(name)
-    old_g.append(float(g))
-
-total_g = sum(old_g)
-st.write(f"**RFT total:** {total_g:,.4f} g")
-
-new_total = st.number_input(
-    "New batch total (g)",
-    min_value=0.0,
-    value=total_g if total_g > 0 else 0.0,
-    step=1.0,
-    format="%.4f",
-    key="new_total_g"
-)
-
-# ---------- Calculate ----------
-if st.button("Calculate batch"):
-    if total_g <= 0:
-        st.error("RFT total must be greater than zero.")
-    else:
-        ratios = [x / total_g for x in old_g]
-        raw = [r * new_total for r in ratios]
-
-        # Rounding + drift correction
-        if round_step == 0.0:
-            final = raw
-        else:
-            final = [round(x / round_step) * round_step for x in raw]
-            drift = new_total - sum(final)
-            biggest_idx = max(range(len(final)), key=lambda i: final[i])
-            final[biggest_idx] += drift
-
-        st.subheader("New batch results")
-
-        df = pd.DataFrame({
-            "MaterialCode": selected_codes,
-            "MaterialName": selected_names,
-            "Ratio": [round(r, 10) for r in ratios],
-            "New (g)": [round(x, 4) for x in final],
+        rows.append({
+            "Ingredient": ing,
+            "Rework_g": rw,
+            "Target_g": tg,
+            "Used_from_Rework_g": used,
+            "Add_Back_g": add,
+            "Over_Target?": add < -1e-9
         })
 
-        st.dataframe(df, hide_index=True, use_container_width=True)
-        st.write(f"**Check sum:** {sum(final):,.4f} g")
+    df = pd.DataFrame(rows)
+    # nicer ordering: shared first, then target-only, then rework-only
+    df["Type"] = df.apply(
+        lambda r: "Shared" if (r["Rework_g"] > 0 and r["Target_g"] > 0)
+        else ("Target-only" if r["Target_g"] > 0 else "Rework-only"),
+        axis=1
+    )
+    df = df.sort_values(["Type", "Ingredient"]).reset_index(drop=True)
+    return df
 
-        # ---- Optional Reference Compare ----
-        if ref_product_id:
-            bom = build_reference_bom(ref, ref_product_id)
 
-            st.subheader("Reference BOM (advisory)")
-            if bom.empty:
-                st.info("Reference BOM not available (check MaterialMaster.txt mapping and ProductMaterialUsage.txt).")
-            else:
-                st.dataframe(bom, use_container_width=True)
+# ----------------------------
+# Default example (your case)
+# NOTE: totals in your message don't match sums; we base math on ingredient lines.
+# ----------------------------
+default_rework = {
+    "OQ8154": 7890,
+    "OG7002": 5,
+    "OG2001": 25,
+    "OG9004": 60,
+}
+default_target = {
+    "OQ8154": 14776,
+    "OG7002": 4,
+    "OG9004": 180,
+    "OG2001": 744,
+}
 
-                manual_df = pd.DataFrame({"MaterialCode": selected_codes, "Manual_g": final})
-                manual_df["Manual_g"] = pd.to_numeric(manual_df["Manual_g"], errors="coerce").fillna(0.0)
-                manual_df = manual_df.groupby("MaterialCode", as_index=False)["Manual_g"].sum()
+# ----------------------------
+# UI: input tables
+# ----------------------------
+st.subheader("1) Enter Rework (Old Batch) and Target (New Batch)")
 
-                manual_total = float(manual_df["Manual_g"].sum()) if not manual_df.empty else 0.0
-                manual_df["ManualPercent"] = (manual_df["Manual_g"] / manual_total * 100.0) if manual_total > 0 else 0.0
+col1, col2 = st.columns(2)
 
-                comp = manual_df.merge(bom[["MaterialCode", "RefPercent"]], on="MaterialCode", how="outer")
-                comp["Manual_g"] = pd.to_numeric(comp["Manual_g"], errors="coerce").fillna(0.0)
-                comp["ManualPercent"] = pd.to_numeric(comp["ManualPercent"], errors="coerce").fillna(0.0)
-                comp["RefPercent"] = pd.to_numeric(comp["RefPercent"], errors="coerce").fillna(0.0)
-                comp["DeltaPercent"] = comp["ManualPercent"] - comp["RefPercent"]
+with col1:
+    st.caption("Rework (Old) - grams by ingredient")
+    rw_df = st.data_editor(
+        pd.DataFrame([{"Ingredient": k, "Grams": v} for k, v in default_rework.items()]),
+        num_rows="dynamic",
+        use_container_width=True,
+        key="rw_editor"
+    )
 
-                view = comp.sort_values("MaterialCode")[["MaterialCode", "Manual_g", "ManualPercent", "RefPercent", "DeltaPercent"]].copy()
-                view["DeltaPercent_num"] = pd.to_numeric(view["DeltaPercent"], errors="coerce").fillna(0.0)
+with col2:
+    st.caption("Target (New) - grams by ingredient")
+    tg_df = st.data_editor(
+        pd.DataFrame([{"Ingredient": k, "Grams": v} for k, v in default_target.items()]),
+        num_rows="dynamic",
+        use_container_width=True,
+        key="tg_editor"
+    )
 
-                # Format numeric columns for display
-                view["Manual_g"] = view["Manual_g"].map(lambda x: f"{x:,.4f}")
-                view["ManualPercent"] = view["ManualPercent"].map(lambda x: f"{x:,.4f}")
-                view["RefPercent"] = view["RefPercent"].map(lambda x: f"{x:,.4f}")
-                view["DeltaPercent"] = view["DeltaPercent_num"].map(lambda x: f"{x:,.4f}")
+def df_to_dict(df: pd.DataFrame) -> dict:
+    d = {}
+    for _, row in df.iterrows():
+        ing = str(row.get("Ingredient", "")).strip()
+        if not ing:
+            continue
+        grams = row.get("Grams", 0)
+        try:
+            grams = float(grams)
+        except Exception:
+            grams = 0.0
+        if grams != 0:
+            d[ing] = grams
+    return d
 
-                def highlight_oos(row):
-                    oos = abs(float(row["DeltaPercent_num"])) > float(tol_pct)
-                    return ["font-weight: 700;" if oos else "" for _ in row.index]
+rework = df_to_dict(rw_df)
+target = df_to_dict(tg_df)
 
-                st.subheader("Manual vs Reference (%)")
-                st.caption(f"Highlighted when |Delta%| > {tol_pct:.2f}%")
+# ----------------------------
+# Max safe reuse calculation
+# ----------------------------
+st.subheader("2) Maximum Safe Reuse %")
+max_f, limiting_ing, limits_df = compute_max_safe_fraction(rework, target)
 
-                st.dataframe(
-                    view.style.apply(highlight_oos, axis=1),
-                    use_container_width=True
-                )
+c1, c2, c3 = st.columns(3)
+c1.metric("Max safe reuse (fraction)", f"{max_f:.4f}")
+c2.metric("Max safe reuse (%)", f"{max_f*100:.2f}%")
+c3.metric("Limiting ingredient", limiting_ing)
 
-        # ---- PDF Download ----
-        pdf_bytes = build_batch_ticket_pdf(df, float(new_total), title="AWLMIX Batch Ticket - New Batch")
-        st.download_button(
-            "Download Batch Ticket (PDF)",
-            data=pdf_bytes,
-            file_name="AWLMIX_Batch_Ticket_New_Batch.pdf",
-            mime="application/pdf"
-        )
+with st.expander("See limiting ratios (Target / Rework) by shared ingredient"):
+    st.dataframe(limits_df, use_container_width=True)
+
+# ----------------------------
+# Choose reuse %
+# ----------------------------
+st.subheader("3) Choose reuse % (auto-defaults to max safe)")
+use_safe_default = st.checkbox("Use max safe % automatically", value=True)
+
+if use_safe_default:
+    reuse_pct = max_f * 100
+else:
+    reuse_pct = st.number_input("Reuse %", min_value=0.0, max_value=200.0, value=float(max_f * 100), step=0.5)
+
+reuse_fraction = reuse_pct / 100.0
+
+# ----------------------------
+# Compute plan
+# ----------------------------
+st.subheader("4) Rework Plan (Used from Rework + Add-backs)")
+plan_df = compute_plan(rework, target, reuse_fraction)
+
+# Summary totals
+total_rework_used = plan_df["Used_from_Rework_g"].sum()
+total_addbacks = plan_df["Add_Back_g"].sum()
+total_target = plan_df["Target_g"].sum()
+
+s1, s2, s3 = st.columns(3)
+s1.metric("Total from rework used (g)", f"{total_rework_used:,.2f}")
+s2.metric("Total add-backs (g)", f"{total_addbacks:,.2f}")
+s3.metric("Target total (g)", f"{total_target:,.2f}")
+
+# Flag over-target issues
+over_df = plan_df[plan_df["Over_Target?"] == True]
+if not over_df.empty:
+    st.error(
+        "Over-target detected (negative add-back). "
+        "This reuse % is NOT safe because you can’t subtract material.\n"
+        f"Reduce reuse % to ≤ {max_f*100:.2f}% (limited by {limiting_ing})."
+    )
+    st.dataframe(over_df[["Ingredient", "Target_g", "Used_from_Rework_g", "Add_Back_g"]], use_container_width=True)
+
+# Display full plan
+st.dataframe(plan_df, use_container_width=True)
+
+# Optional: export CSV
+st.download_button(
+    "Download plan as CSV",
+    data=plan_df.to_csv(index=False).encode("utf-8"),
+    file_name="awlmix_rework_plan.csv",
+    mime="text/csv"
+)
+
