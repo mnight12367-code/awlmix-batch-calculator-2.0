@@ -10,12 +10,17 @@ from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 
-st.title("New Batch (Manual) — Dynamic Ingredient Calculator (grams)")
+st.title("New Batch (Manual) — Dynamic Batch Calculator")
 
 # -----------------------------
 # PDF helper
 # -----------------------------
-def build_batch_ticket_pdf(df: pd.DataFrame, new_total: float, title: str = "AWLMIX Batch Ticket") -> bytes:
+def build_batch_ticket_pdf(
+    df: pd.DataFrame,
+    new_total_g: float,
+    title: str,
+    packaging_row: dict | None = None,
+) -> bytes:
     buf = BytesIO()
     doc = SimpleDocTemplate(
         buf,
@@ -31,15 +36,16 @@ def build_batch_ticket_pdf(df: pd.DataFrame, new_total: float, title: str = "AWL
 
     story.append(Paragraph(title, styles["Title"]))
     story.append(Paragraph(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}", styles["Normal"]))
-    story.append(Spacer(1, 12))
+    story.append(Spacer(1, 10))
 
-    story.append(Paragraph(f"<b>Target Total:</b> {float(new_total):,.4f} g", styles["Normal"]))
-    story.append(Spacer(1, 12))
+    story.append(Paragraph(f"<b>Target Total:</b> {float(new_total_g):,.4f} g", styles["Normal"]))
+    story.append(Spacer(1, 10))
 
+    # Ingredient table
     cols = ["MaterialCode", "MaterialName", "Ratio", "New (g)"]
     table_data = [cols] + df[cols].astype(str).values.tolist()
 
-    t = Table(table_data, hAlign="LEFT", colWidths=[90, 230, 80, 90])
+    t = Table(table_data, hAlign="LEFT", colWidths=[90, 240, 80, 90])
     t.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
         ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
@@ -49,27 +55,40 @@ def build_batch_ticket_pdf(df: pd.DataFrame, new_total: float, title: str = "AWL
         ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.whitesmoke, colors.white]),
     ]))
     story.append(t)
-    story.append(Spacer(1, 12))
+    story.append(Spacer(1, 10))
 
     check_sum = float(pd.to_numeric(df["New (g)"], errors="coerce").fillna(0).sum())
     story.append(Paragraph(f"<b>Check Sum:</b> {check_sum:,.4f} g", styles["Normal"]))
-
     story.append(Spacer(1, 14))
 
-    story.append(Paragraph("<b>QC Results (Operator Fill)</b>", styles["Normal"]))
+    # Packaging block (replaces QC block)
+    story.append(Paragraph("<b>Packaging (Source of Truth)</b>", styles["Normal"]))
     story.append(Spacer(1, 6))
 
-    qc_table = Table(
-        [
-            ["Last Batch ΔE00 (CIEDE2000):", "__________"],
-            ["Last Batch ΔL:", "__________"],
-            ["Last Batch Δa:", "__________"],
-            ["Last Batch Δb:", "__________"],
-        ],
-        hAlign="LEFT",
-        colWidths=[220, 220],
-    )
-    qc_table.setStyle(TableStyle([
+    if packaging_row:
+        pack_table = Table(
+            [
+                ["PackageCode", str(packaging_row.get("PackageCode", ""))],
+                ["PackDescription", str(packaging_row.get("PackDescription", ""))],
+                ["LabelUPC", str(packaging_row.get("LabelUPC", ""))],
+                ["CaseUPC", str(packaging_row.get("CaseUPC", ""))],
+            ],
+            hAlign="LEFT",
+            colWidths=[140, 300],
+        )
+    else:
+        pack_table = Table(
+            [
+                ["PackageCode", "________________________"],
+                ["PackDescription", "________________________"],
+                ["LabelUPC", "________________________"],
+                ["CaseUPC", "________________________"],
+            ],
+            hAlign="LEFT",
+            colWidths=[140, 300],
+        )
+
+    pack_table.setStyle(TableStyle([
         ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
         ("FONTSIZE", (0, 0), (-1, -1), 10),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
@@ -79,7 +98,8 @@ def build_batch_ticket_pdf(df: pd.DataFrame, new_total: float, title: str = "AWL
         ("TOPPADDING", (0, 0), (-1, -1), 6),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
     ]))
-    story.append(qc_table)
+
+    story.append(pack_table)
 
     doc.build(story)
     return buf.getvalue()
@@ -89,32 +109,29 @@ def build_batch_ticket_pdf(df: pd.DataFrame, new_total: float, title: str = "AWL
 # Loaders
 # -----------------------------
 @st.cache_data
+def load_materials_csv(path: str) -> pd.DataFrame:
+    df = pd.read_csv(path)
+    df.columns = [c.strip() for c in df.columns]
+    if "MaterialCode" not in df.columns or "MaterialName" not in df.columns:
+        raise ValueError("MaterialMaster.csv must contain: MaterialCode, MaterialName")
+    df["MaterialCode"] = df["MaterialCode"].astype(str).str.strip()
+    df["MaterialName"] = df["MaterialName"].astype(str).str.strip()
+    df = df.dropna(subset=["MaterialCode"]).drop_duplicates(subset=["MaterialCode"]).sort_values("MaterialCode")
+    return df
+
+@st.cache_data
 def load_ref_txt(path: str, cols: list[str]) -> pd.DataFrame:
     if not os.path.exists(path):
         return pd.DataFrame(columns=cols)
-    df = pd.read_csv(path, header=None, names=cols)
+    df = pd.read_csv(path, header=None, names=cols, quotechar='"', skipinitialspace=True)
     for c in df.columns:
         if df[c].dtype == object:
             df[c] = df[c].astype(str).str.replace('"', "", regex=False).str.strip()
     return df
 
 @st.cache_data
-def load_materials_csv(path: str) -> pd.DataFrame:
-    df = pd.read_csv(path)
-    df.columns = [c.strip() for c in df.columns]
-    if "MaterialCode" not in df.columns or "MaterialName" not in df.columns:
-        raise ValueError("CSV must contain columns: MaterialCode, MaterialName")
-    df["MaterialCode"] = df["MaterialCode"].astype(str).str.strip()
-    df["MaterialName"] = df["MaterialName"].astype(str).str.strip()
-    df = df.dropna(subset=["MaterialCode"])
-    df = df.drop_duplicates(subset=["MaterialCode"]).sort_values("MaterialCode")
-    return df
-
-@st.cache_data
 def load_product_weight_targets(path: str = "ProductWeightTargets.txt") -> pd.DataFrame:
-    # RowID, ProductID, "UnitType", TargetWeightLB, TargetWeightG
-    if not os.path.exists(path):
-        return pd.DataFrame(columns=["RowID","ProductID","UnitType","TargetWeightLB","TargetWeightG"])
+    # RowID,ProductID,"UnitType",TargetWeightLB,TargetWeightG
     df = pd.read_csv(
         path,
         header=None,
@@ -123,10 +140,26 @@ def load_product_weight_targets(path: str = "ProductWeightTargets.txt") -> pd.Da
         skipinitialspace=True,
     )
     df["ProductID"] = pd.to_numeric(df["ProductID"], errors="coerce")
+    df["UnitType"] = df["UnitType"].astype(str).str.replace('"', "", regex=False).str.strip()
     df["TargetWeightLB"] = pd.to_numeric(df["TargetWeightLB"], errors="coerce")
     df["TargetWeightG"] = pd.to_numeric(df["TargetWeightG"], errors="coerce")
-    df["UnitType"] = df["UnitType"].astype(str).str.replace('"', "", regex=False).str.strip()
     return df.dropna(subset=["ProductID", "UnitType"])
+
+@st.cache_data
+def load_packaging_master(path: str = "PackagingMaster.txt") -> pd.DataFrame:
+    # RowID,PackagingID,"LabelUPC","CaseUPC","PackDescription","PackageCode"
+    df = pd.read_csv(
+        path,
+        header=None,
+        names=["RowID", "PackagingID", "LabelUPC", "CaseUPC", "PackDescription", "PackageCode"],
+        quotechar='"',
+        skipinitialspace=True,
+    )
+    # clean strings
+    for c in ["LabelUPC", "CaseUPC", "PackDescription", "PackageCode"]:
+        df[c] = df[c].astype(str).str.replace('"', "", regex=False).str.strip()
+    df["PackagingID"] = pd.to_numeric(df["PackagingID"], errors="coerce")
+    return df.dropna(subset=["PackageCode"]).sort_values("PackageCode")
 
 @st.cache_data
 def load_reference_tables() -> dict[str, pd.DataFrame]:
@@ -144,15 +177,14 @@ def build_reference_bom(ref: dict[str, pd.DataFrame], product_id: int) -> pd.Dat
         return pd.DataFrame(columns=["MaterialCode", "MaterialName", "RefPercent"])
 
     usage["ProductID"] = pd.to_numeric(usage["ProductID"], errors="coerce")
-    usage = usage[usage["ProductID"] == product_id].copy()
+    usage = usage[usage["ProductID"] == product_id]
 
-    usage["UsageFraction"] = pd.to_numeric(usage["UsageFraction"], errors="coerce").fillna(0.0)
     bom = usage.merge(mat, on="MaterialID", how="left")
+    bom["UsageFraction"] = pd.to_numeric(bom["UsageFraction"], errors="coerce").fillna(0.0)
     bom["RefPercent"] = bom["UsageFraction"] * 100.0
 
     bom = bom.groupby(["MaterialCode", "MaterialName"], as_index=False)["RefPercent"].sum()
-    bom = bom.sort_values("RefPercent", ascending=False).reset_index(drop=True)
-    return bom
+    return bom.sort_values("RefPercent", ascending=False).reset_index(drop=True)
 
 
 # -----------------------------
@@ -168,75 +200,76 @@ try:
     name_map = dict(zip(materials["MaterialCode"], materials["MaterialName"]))
     materials_loaded = True
 except Exception as e:
-    st.warning("MaterialMaster.csv not found/invalid. Needs columns: MaterialCode, MaterialName.")
+    st.warning("MaterialMaster.csv missing/invalid (needs MaterialCode, MaterialName).")
     st.caption(f"Debug: {e}")
 
-
 # -----------------------------
-# Sidebar: settings + reference
+# Sidebar controls
 # -----------------------------
 with st.sidebar:
     st.header("Settings")
-
     n = st.number_input("Number of ingredients", min_value=1, max_value=50, value=4, step=1)
     rounding = st.selectbox("Rounding", ["No rounding", "1 g", "0.1 g", "0.01 g"], index=1)
+    round_step = 0.0 if rounding == "No rounding" else float(rounding.split()[0])
 
     st.divider()
     st.subheader("Reference (optional)")
-
-    tol_pct = st.slider(
-        "Reference tolerance (±%)",
-        min_value=0.0,
-        max_value=10.0,
-        value=0.50,
-        step=0.05,
-        help="Highlights ingredients where |Manual% - Ref%| > tolerance."
-    )
+    tol_pct = st.slider("Reference tolerance (±%)", 0.0, 10.0, 0.50, 0.05)
 
     ref = load_reference_tables()
     pm = ref["product_master"]
     pu = ref["units"]
-    wt = load_product_weight_targets("ProductWeightTargets.txt")
 
     ref_product_id = None
-    selected_unit = None
+    selected_unit = ""
 
-    if pm.empty:
-        st.caption("Reference files missing (ProductMaster.txt / ProductUnits.txt / etc).")
-        ref_product_code = ""
-    else:
+    if not pm.empty:
         ref_product_code = st.selectbox(
             "Reference ProductCode",
-            options=[""] + sorted(pm["ProductCode"].dropna().unique().tolist()),
+            options=[""] + pm["ProductCode"].dropna().unique().tolist(),
             index=0
         )
-
         if ref_product_code:
             ref_product_id = int(pd.to_numeric(
                 pm.loc[pm["ProductCode"] == ref_product_code, "ProductID"].iloc[0],
                 errors="coerce"
             ))
 
-            pu["ProductID"] = pd.to_numeric(pu["ProductID"], errors="coerce")
             unit_options = pu.loc[pu["ProductID"] == ref_product_id, "UnitType"].dropna().unique().tolist()
             selected_unit = st.selectbox("Reference Unit", options=[""] + unit_options, index=0)
 
+            wt = load_product_weight_targets("ProductWeightTargets.txt")
             if selected_unit:
                 wt_row = wt[(wt["ProductID"] == ref_product_id) & (wt["UnitType"] == selected_unit)]
                 if wt_row.empty:
                     st.warning("No target weight found for this Product + Unit.")
                 else:
                     target_lb = float(wt_row["TargetWeightLB"].iloc[0])
-                    target_g = float(wt_row["TargetWeightG"].iloc[0])
+                    target_g  = float(wt_row["TargetWeightG"].iloc[0])
                     st.caption(f"Target weight: {target_lb:,.4f} lb | {target_g:,.2f} g ({selected_unit})")
 
+    st.divider()
+    st.subheader("Packaging (optional)")
+    packaging_row = None
+    try:
+        pack_df = load_packaging_master("PackagingMaster.txt")
+        pack_options = [""] + [
+            f'{r["PackageCode"]} — {r["PackDescription"]}'
+            for _, r in pack_df.iterrows()
+        ]
+        pack_choice = st.selectbox("Packaging", options=pack_options, index=0)
+        if pack_choice:
+            chosen_code = pack_choice.split(" — ", 1)[0].strip()
+            row = pack_df[pack_df["PackageCode"] == chosen_code].iloc[0].to_dict()
+            packaging_row = row
+    except Exception as e:
+        st.caption("PackagingMaster.txt not found/loaded yet.")
+        st.caption(f"Debug: {e}")
 
 # -----------------------------
-# Inputs: Manual formula
+# Inputs (manual = authoritative)
 # -----------------------------
-round_step = 0.0 if rounding == "No rounding" else float(rounding.split()[0])
-
-st.subheader("Batch Formula (Manual Entry)")
+st.subheader("Batch Formula (Manual RFT)")
 
 selected_codes: list[str] = []
 selected_names: list[str] = []
@@ -263,16 +296,15 @@ for i in range(int(n)):
     selected_names.append(name)
     old_g.append(float(g))
 
-total_g = sum(old_g)
-st.write(f"**Manual total (RFT):** {total_g:,.4f} g")
+total_g = float(sum(old_g))
+st.write(f"**RFT total:** {total_g:,.4f} g")
 
 new_total = st.number_input(
     "New batch total (g)",
     min_value=0.0,
-    value=float(total_g) if total_g > 0 else 0.0,
+    value=total_g if total_g > 0 else 0.0,
     step=1.0,
     format="%.4f",
-    key="new_total_g"
 )
 
 # -----------------------------
@@ -280,17 +312,17 @@ new_total = st.number_input(
 # -----------------------------
 if st.button("Calculate batch"):
     if total_g <= 0:
-        st.error("Manual total must be greater than zero.")
+        st.error("RFT total must be greater than zero.")
         st.stop()
 
     ratios = [x / total_g for x in old_g]
-    raw = [r * float(new_total) for r in ratios]
+    raw = [r * new_total for r in ratios]
 
     if round_step == 0.0:
         final = raw
     else:
         final = [round(x / round_step) * round_step for x in raw]
-        drift = float(new_total) - sum(final)
+        drift = float(new_total) - float(sum(final))
         biggest_idx = max(range(len(final)), key=lambda i: final[i])
         final[biggest_idx] += drift
 
@@ -306,13 +338,13 @@ if st.button("Calculate batch"):
     st.dataframe(df, hide_index=True, use_container_width=True)
     st.write(f"**Check sum:** {sum(final):,.4f} g")
 
-    # ---- Reference BOM compare (optional) ----
-    if ref_product_id is not None:
+    # Reference BOM compare (advisory)
+    if ref_product_id:
         bom = build_reference_bom(ref, ref_product_id)
 
         st.subheader("Reference BOM (advisory)")
         if bom.empty:
-            st.info("Reference BOM not available (check MaterialMaster.txt mapping + ProductMaterialUsage.txt).")
+            st.info("Reference BOM not available (check MaterialMaster.txt + ProductMaterialUsage.txt).")
         else:
             st.dataframe(bom, use_container_width=True)
 
@@ -332,7 +364,6 @@ if st.button("Calculate batch"):
             view = comp.sort_values("MaterialCode")[["MaterialCode", "Manual_g", "ManualPercent", "RefPercent", "DeltaPercent"]].copy()
             view["DeltaPercent_num"] = pd.to_numeric(view["DeltaPercent"], errors="coerce").fillna(0.0)
 
-            # formatting for readability
             view["Manual_g"] = view["Manual_g"].map(lambda x: f"{x:,.4f}")
             view["ManualPercent"] = view["ManualPercent"].map(lambda x: f"{x:,.4f}")
             view["RefPercent"] = view["RefPercent"].map(lambda x: f"{x:,.4f}")
@@ -347,11 +378,17 @@ if st.button("Calculate batch"):
             st.caption(f"Highlighted when |Delta%| > {tol_pct:.2f}%")
             st.dataframe(view.style.apply(highlight_oos, axis=1), use_container_width=True)
 
-    # ---- PDF Download ----
-    pdf_bytes = build_batch_ticket_pdf(df, float(new_total), title="AWLMIX Batch Ticket - New Batch")
+    pdf_bytes = build_batch_ticket_pdf(
+        df=df,
+        new_total_g=float(new_total),
+        title="AWLMIX Batch Ticket - New Batch",
+        packaging_row=packaging_row,
+    )
+
     st.download_button(
         "Download Batch Ticket (PDF)",
         data=pdf_bytes,
         file_name="AWLMIX_Batch_Ticket_New_Batch.pdf",
         mime="application/pdf"
     )
+
