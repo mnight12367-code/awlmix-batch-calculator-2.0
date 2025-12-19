@@ -70,8 +70,6 @@ qc_table = Table(
     colWidths=[220, 220],
 )
 
-    )
-
     qc_table.setStyle(TableStyle([
         ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
         ("FONTSIZE", (0, 0), (-1, -1), 10),
@@ -340,5 +338,6 @@ if st.button("Calculate batch"):
             file_name="AWLMIX_Batch_Ticket_New_Batch.pdf",
             mime="application/pdf"
         )
+
 
 
