@@ -59,14 +59,17 @@ def build_batch_ticket_pdf(df: pd.DataFrame, new_total: float, title: str = "AWL
     story.append(Paragraph("<b>QC Results (Operator Fill)</b>", styles["Normal"]))
     story.append(Spacer(1, 6))
 
-    qc_table = Table(
-        [
-            ["Last Batch ΔE00 (CIEDE2000):", "__________"],
-            ["Last Batch Δa:", "__________"],
-            ["Last Batch Δb:", "__________"],
-        ],
-        hAlign="LEFT",
-        colWidths=[220, 220],
+qc_table = Table(
+    [
+        ["Last Batch ΔE00 (CIEDE2000):", "__________"],
+        ["Last Batch ΔL:", "__________"],
+        ["Last Batch Δa:", "__________"],
+        ["Last Batch Δb:", "__________"],
+    ],
+    hAlign="LEFT",
+    colWidths=[220, 220],
+)
+
     )
 
     qc_table.setStyle(TableStyle([
@@ -337,4 +340,5 @@ if st.button("Calculate batch"):
             file_name="AWLMIX_Batch_Ticket_New_Batch.pdf",
             mime="application/pdf"
         )
+
 
