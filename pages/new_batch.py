@@ -89,6 +89,16 @@ def build_batch_ticket_pdf(df: pd.DataFrame, new_total: float, title: str = "AWL
 
 # ---------- Load materials from CSV ----------
 @st.cache_data
+def load_ref_txt(path: str, cols: list[str]) -> pd.DataFrame:
+    if not os.path.exists(path):
+        return pd.DataFrame(columns=cols)
+    df = pd.read_csv(path, header=None, names=cols)
+    for c in df.columns:
+        if df[c].dtype == object:
+            df[c] = df[c].astype(str).str.replace('"', "", regex=False).str.strip()
+    return df
+
+@st.cache_data
 def load_materials_csv(path: str) -> pd.DataFrame:
     df = pd.read_csv(path)
     df.columns = [c.strip() for c in df.columns]
@@ -188,19 +198,16 @@ with st.sidebar:
         max_value=10.0,
         value=0.50,
         step=0.05,
-        help="Highlights ingredients where |Manual% - Ref%| is greater than this tolerance."
     )
 
     ref = load_reference_tables()
     pm = ref["product_master"]
     pu = ref["units"]
-    wt = ref["wt"]
 
     ref_product_id = None
+    selected_unit = None
 
-    if pm.empty:
-        st.caption("Reference files not found (ProductMaster.txt / ProductMaterialUsage.txt / MaterialMaster.txt).")
-    else:
+    if not pm.empty:
         ref_product_code = st.selectbox(
             "Reference ProductCode",
             options=[""] + pm["ProductCode"].dropna().unique().tolist(),
@@ -213,61 +220,26 @@ with st.sidebar:
                 errors="coerce"
             ))
 
-          wt = load_product_weight_targets("ProductWeightTargets.txt")
+            unit_options = pu.loc[pu["ProductID"] == ref_product_id, "UnitType"].dropna().unique().tolist()
+            selected_unit = st.selectbox("Reference Unit", options=[""] + unit_options, index=0)
 
-if ref_product_id and selected_unit:
-    wt_row = wt[(wt["ProductID"] == ref_product_id) & (wt["UnitType"] == selected_unit)]
+            wt = load_product_weight_targets("ProductWeightTargets.txt")
 
-    if wt_row.empty:
-        st.warning("No target weight found for this Product + Unit.")
-    else:
-        target_lb = float(wt_row["TargetWeightLB"].iloc[0])
-        target_g  = float(wt_row["TargetWeightG"].iloc[0])
-        st.caption(f"Target weight: {target_lb:,.4f} lb  |  {target_g:,.2f} g  ({selected_unit})")
+            if selected_unit:
+                wt_row = wt[
+                    (wt["ProductID"] == ref_product_id) &
+                    (wt["UnitType"] == selected_unit)
+                ]
 
+                if wt_row.empty:
+                    st.warning("No target weight found for this Product + Unit.")
+                else:
+                    target_lb = float(wt_row["TargetWeightLB"].iloc[0])
+                    target_g  = float(wt_row["TargetWeightG"].iloc[0])
+                    st.caption(
+                        f"Target weight: {target_lb:,.4f} lb | {target_g:,.2f} g ({selected_unit})"
+                    )
 
-round_step = 0.0 if rounding == "No rounding" else float(rounding.split()[0])
-
-
-# ---------- Inputs ----------
-st.subheader("Batch Formula (RFT)")
-
-selected_codes: list[str] = []
-selected_names: list[str] = []
-old_g: list[float] = []
-
-for i in range(int(n)):
-    col_code, col_weight = st.columns([1.3, 1.0])
-
-    with col_code:
-        if materials_loaded:
-            code = st.selectbox(f"MaterialCode {i+1}", options=codes_list, key=f"code_{i}")
-            name = name_map.get(code, "") if code else ""
-            if name:
-                st.caption(f"Name: {name}")
-        else:
-            code = st.text_input(f"MaterialCode {i+1}", placeholder="e.g. OQ8154", key=f"code_{i}")
-            name = ""
-
-    with col_weight:
-        label = f"{code} (g)" if code else f"Ingredient {i+1} (g)"
-        g = st.number_input(label, min_value=0.0, step=1.0, format="%.4f", key=f"g_{i}")
-
-    selected_codes.append(code if code else f"Ingredient {i+1}")
-    selected_names.append(name)
-    old_g.append(float(g))
-
-total_g = sum(old_g)
-st.write(f"**RFT total:** {total_g:,.4f} g")
-
-new_total = st.number_input(
-    "New batch total (g)",
-    min_value=0.0,
-    value=total_g if total_g > 0 else 0.0,
-    step=1.0,
-    format="%.4f",
-    key="new_total_g"
-)
 
 # ---------- Calculate ----------
 if st.button("Calculate batch"):
@@ -347,6 +319,7 @@ if st.button("Calculate batch"):
             file_name="AWLMIX_Batch_Ticket_New_Batch.pdf",
             mime="application/pdf"
         )
+
 
 
 
