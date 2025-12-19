@@ -59,16 +59,16 @@ def build_batch_ticket_pdf(df: pd.DataFrame, new_total: float, title: str = "AWL
     story.append(Paragraph("<b>QC Results (Operator Fill)</b>", styles["Normal"]))
     story.append(Spacer(1, 6))
 
-qc_table = Table(
-    [
-        ["Last Batch ΔE00 (CIEDE2000):", "__________"],
-        ["Last Batch ΔL:", "__________"],
-        ["Last Batch Δa:", "__________"],
-        ["Last Batch Δb:", "__________"],
-    ],
-    hAlign="LEFT",
-    colWidths=[220, 220],
-)
+    qc_table = Table(
+        [
+            ["Last Batch ΔE00 (CIEDE2000):", "__________"],
+            ["Last Batch ΔL:", "__________"],
+            ["Last Batch Δa:", "__________"],
+            ["Last Batch Δb:", "__________"],
+        ],
+        hAlign="LEFT",
+        colWidths=[220, 220],
+    )
 
     qc_table.setStyle(TableStyle([
         ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
@@ -265,7 +265,6 @@ if st.button("Calculate batch"):
         ratios = [x / total_g for x in old_g]
         raw = [r * new_total for r in ratios]
 
-        # Rounding + drift correction
         if round_step == 0.0:
             final = raw
         else:
@@ -286,7 +285,6 @@ if st.button("Calculate batch"):
         st.dataframe(df, hide_index=True, use_container_width=True)
         st.write(f"**Check sum:** {sum(final):,.4f} g")
 
-        # ---- Optional Reference Compare ----
         if ref_product_id:
             bom = build_reference_bom(ref, ref_product_id)
 
@@ -312,7 +310,6 @@ if st.button("Calculate batch"):
                 view = comp.sort_values("MaterialCode")[["MaterialCode", "Manual_g", "ManualPercent", "RefPercent", "DeltaPercent"]].copy()
                 view["DeltaPercent_num"] = pd.to_numeric(view["DeltaPercent"], errors="coerce").fillna(0.0)
 
-                # Format numeric columns for display
                 view["Manual_g"] = view["Manual_g"].map(lambda x: f"{x:,.4f}")
                 view["ManualPercent"] = view["ManualPercent"].map(lambda x: f"{x:,.4f}")
                 view["RefPercent"] = view["RefPercent"].map(lambda x: f"{x:,.4f}")
@@ -320,7 +317,8 @@ if st.button("Calculate batch"):
 
                 def highlight_oos(row):
                     oos = abs(float(row["DeltaPercent_num"])) > float(tol_pct)
-                    return ["font-weight: 700;" if oos else "" for _ in row.index]
+                    style = "background-color: #ffe6e6; font-weight: 700;" if oos else ""
+                    return [style for _ in row.index]
 
                 st.subheader("Manual vs Reference (%)")
                 st.caption(f"Highlighted when |Delta%| > {tol_pct:.2f}%")
@@ -330,7 +328,6 @@ if st.button("Calculate batch"):
                     use_container_width=True
                 )
 
-        # ---- PDF Download ----
         pdf_bytes = build_batch_ticket_pdf(df, float(new_total), title="AWLMIX Batch Ticket - New Batch")
         st.download_button(
             "Download Batch Ticket (PDF)",
@@ -338,6 +335,7 @@ if st.button("Calculate batch"):
             file_name="AWLMIX_Batch_Ticket_New_Batch.pdf",
             mime="application/pdf"
         )
+
 
 
 
