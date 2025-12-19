@@ -106,14 +106,21 @@ def load_materials_csv(path: str) -> pd.DataFrame:
 
 # ---------- Reference TXT loaders (optional BOM compare) ----------
 @st.cache_data
-def load_ref_txt(path: str, cols: list[str]) -> pd.DataFrame:
-    if not os.path.exists(path):
-        return pd.DataFrame(columns=cols)
-    df = pd.read_csv(path, header=None, names=cols)
-    for c in df.columns:
-        if df[c].dtype == object:
-            df[c] = df[c].astype(str).str.replace('"', "", regex=False).str.strip()
-    return df
+def load_product_weight_targets(path: str = "ProductWeightTargets.txt") -> pd.DataFrame:
+    # File is CSV-like, no header: RowID,ProductID,"UnitType",TargetWeightLB,TargetWeightG
+    df = pd.read_csv(
+        path,
+        header=None,
+        names=["RowID", "ProductID", "UnitType", "TargetWeightLB", "TargetWeightG"],
+        quotechar='"',
+        skipinitialspace=True,
+    )
+    df["ProductID"] = pd.to_numeric(df["ProductID"], errors="coerce")
+    df["TargetWeightLB"] = pd.to_numeric(df["TargetWeightLB"], errors="coerce")
+    df["TargetWeightG"] = pd.to_numeric(df["TargetWeightG"], errors="coerce")
+    df["UnitType"] = df["UnitType"].astype(str).str.strip().str.replace('"', "", regex=False)
+    return df.dropna(subset=["ProductID", "UnitType"])
+
 
 
 @st.cache_data
@@ -206,13 +213,18 @@ with st.sidebar:
                 errors="coerce"
             ))
 
-            unit_options = pu.loc[pu["ProductID"] == ref_product_id, "UnitType"].dropna().unique().tolist()
-            _ = st.selectbox("Reference Unit", options=[""] + unit_options, index=0)
+          wt = load_product_weight_targets("ProductWeightTargets.txt")
 
-            wt_row = wt.loc[wt["ProductID"] == ref_product_id]
-            if not wt_row.empty:
-                target_lb = float(pd.to_numeric(wt_row["TargetWeightLB"], errors="coerce").fillna(0).iloc[0])
-                st.caption(f"Target weight (lb): {target_lb:,.4f}")
+if ref_product_id and selected_unit:
+    wt_row = wt[(wt["ProductID"] == ref_product_id) & (wt["UnitType"] == selected_unit)]
+
+    if wt_row.empty:
+        st.warning("No target weight found for this Product + Unit.")
+    else:
+        target_lb = float(wt_row["TargetWeightLB"].iloc[0])
+        target_g  = float(wt_row["TargetWeightG"].iloc[0])
+        st.caption(f"Target weight: {target_lb:,.4f} lb  |  {target_g:,.2f} g  ({selected_unit})")
+
 
 round_step = 0.0 if rounding == "No rounding" else float(rounding.split()[0])
 
@@ -335,6 +347,7 @@ if st.button("Calculate batch"):
             file_name="AWLMIX_Batch_Ticket_New_Batch.pdf",
             mime="application/pdf"
         )
+
 
 
 
