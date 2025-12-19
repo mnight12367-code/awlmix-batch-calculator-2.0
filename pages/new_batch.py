@@ -43,6 +43,35 @@ def build_batch_ticket_pdf(df: pd.DataFrame, new_total: float, title: str = "AWL
     story.append(Spacer(1, 12))
 
     check_sum = float(pd.to_numeric(df["New (g)"], errors="coerce").fillna(0).sum())
+        story.append(Spacer(1, 14))
+
+    # ---- QC Results (Operator Fill) ----
+    story.append(Paragraph("<b>QC Results (Operator Fill)</b>", styles["Normal"]))
+    story.append(Spacer(1, 6))
+
+    qc_table = Table(
+        [
+            ["Last Batch ΔE00 (CIEDE2000):", "__________"],
+            ["Last Batch Δa:", "__________"],
+            ["Last Batch Δb:", "__________"],
+        ],
+        hAlign="LEFT",
+        colWidths=[220, 220],
+    )
+
+    qc_table.setStyle(TableStyle([
+        ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
+        ("FONTSIZE", (0, 0), (-1, -1), 10),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.whitesmoke),
+        ("LEFTPADDING", (0, 0), (-1, -1), 6),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+        ("TOPPADDING", (0, 0), (-1, -1), 6),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+    ]))
+
+    story.append(qc_table)
+
     story.append(Paragraph(f"<b>Check Sum:</b> {check_sum:,.4f} g", styles["Normal"]))
 
     doc.build(story)
@@ -85,6 +114,15 @@ except Exception as e:
 
 # ---------- Sidebar ----------
 with st.sidebar:
+        tol_pct = st.slider(
+        "Reference tolerance (±%)",
+        min_value=0.0,
+        max_value=10.0,
+        value=0.50,
+        step=0.05,
+        help="Highlights ingredients where |Manual% - Ref%| is greater than this tolerance."
+)
+    
     st.header("Settings")
     n = st.number_input("Number of ingredients", min_value=1, max_value=50, value=4, step=1)
     rounding = st.selectbox("Rounding", ["No rounding", "1 g", "0.1 g", "0.01 g"], index=1)
@@ -168,6 +206,28 @@ if st.button("Calculate batch"):
             file_name="AWLMIX_Batch_Ticket_New_Batch.pdf",
             mime="application/pdf"
         )
+        
+                view = comp.sort_values("MaterialCode")[["MaterialCode", "Manual_g", "ManualPercent", "RefPercent", "DeltaPercent"]].copy()
+
+                # Format for display (optional, keeps it readable)
+                view["Manual_g"] = view["Manual_g"].map(lambda x: f"{x:,.4f}")
+                view["ManualPercent"] = view["ManualPercent"].map(lambda x: f"{x:,.4f}")
+                view["RefPercent"] = view["RefPercent"].map(lambda x: f"{x:,.4f}")
+                view["DeltaPercent_num"] = pd.to_numeric(comp["DeltaPercent"], errors="coerce").fillna(0.0).values
+                view["DeltaPercent"] = view["DeltaPercent_num"].map(lambda x: f"{x:,.4f}")
+
+                def highlight_oos(row):
+                    oos = abs(float(row["DeltaPercent_num"])) > float(tol_pct)
+                    return ["font-weight: 700;" if oos else "" for _ in row.index]
+
+                st.subheader("Manual vs Reference (%)")
+                st.caption(f"Highlighted when |Delta%| > {tol_pct:.2f}%")
+
+                st.dataframe(
+                    view.drop(columns=["DeltaPercent_num"]).style.apply(highlight_oos, axis=1),
+                    use_container_width=True
+                )
+
 
 
 
