@@ -1,3 +1,4 @@
+import os
 import streamlit as st
 import pandas as pd
 
@@ -14,7 +15,14 @@ st.title("Dynamic Batch Ingredient Calculator (grams)")
 # ---------- PDF helper ----------
 def build_batch_ticket_pdf(df: pd.DataFrame, new_total: float, title: str = "AWLMIX Batch Ticket") -> bytes:
     buf = BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=letter, leftMargin=36, rightMargin=36, topMargin=36, bottomMargin=36)
+    doc = SimpleDocTemplate(
+        buf,
+        pagesize=letter,
+        leftMargin=36,
+        rightMargin=36,
+        topMargin=36,
+        bottomMargin=36
+    )
 
     styles = getSampleStyleSheet()
     story = []
@@ -43,7 +51,9 @@ def build_batch_ticket_pdf(df: pd.DataFrame, new_total: float, title: str = "AWL
     story.append(Spacer(1, 12))
 
     check_sum = float(pd.to_numeric(df["New (g)"], errors="coerce").fillna(0).sum())
-        story.append(Spacer(1, 14))
+    story.append(Paragraph(f"<b>Check Sum:</b> {check_sum:,.4f} g", styles["Normal"]))
+
+    story.append(Spacer(1, 14))
 
     # ---- QC Results (Operator Fill) ----
     story.append(Paragraph("<b>QC Results (Operator Fill)</b>", styles["Normal"]))
@@ -63,7 +73,7 @@ def build_batch_ticket_pdf(df: pd.DataFrame, new_total: float, title: str = "AWL
         ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
         ("FONTSIZE", (0, 0), (-1, -1), 10),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("BACKGROUND", (0, 0), (-1, 0), colors.whitesmoke),
+        ("ROWBACKGROUNDS", (0, 0), (-1, -1), [colors.whitesmoke, colors.white]),
         ("LEFTPADDING", (0, 0), (-1, -1), 6),
         ("RIGHTPADDING", (0, 0), (-1, -1), 6),
         ("TOPPADDING", (0, 0), (-1, -1), 6),
@@ -71,8 +81,6 @@ def build_batch_ticket_pdf(df: pd.DataFrame, new_total: float, title: str = "AWL
     ]))
 
     story.append(qc_table)
-
-    story.append(Paragraph(f"<b>Check Sum:</b> {check_sum:,.4f} g", styles["Normal"]))
 
     doc.build(story)
     return buf.getvalue()
@@ -95,6 +103,50 @@ def load_materials_csv(path: str) -> pd.DataFrame:
     return df
 
 
+# ---------- Reference TXT loaders (optional BOM compare) ----------
+@st.cache_data
+def load_ref_txt(path: str, cols: list[str]) -> pd.DataFrame:
+    if not os.path.exists(path):
+        return pd.DataFrame(columns=cols)
+    df = pd.read_csv(path, header=None, names=cols)
+    for c in df.columns:
+        if df[c].dtype == object:
+            df[c] = df[c].astype(str).str.replace('"', "", regex=False).str.strip()
+    return df
+
+
+@st.cache_data
+def load_reference_tables() -> dict[str, pd.DataFrame]:
+    ref = {}
+    ref["product_master"] = load_ref_txt("ProductMaster.txt", ["ProductID", "ProductCode", "ProductName"])
+    ref["usage"] = load_ref_txt("ProductMaterialUsage.txt", ["RowID", "ProductID", "MaterialID", "UsageFraction"])
+    ref["units"] = load_ref_txt("ProductUnits.txt", ["RowID", "ProductID", "UnitType"])
+    ref["wt"] = load_ref_txt("ProductWeightTargets.txt", ["RowID", "ProductID", "TargetWeightLB", "Notes"])
+    ref["material_master_ref"] = load_ref_txt("MaterialMaster.txt", ["MaterialID", "MaterialCode", "MaterialName"])
+    return ref
+
+
+def build_reference_bom(ref: dict[str, pd.DataFrame], product_id: int) -> pd.DataFrame:
+    usage = ref["usage"]
+    mat = ref["material_master_ref"]
+
+    if usage.empty or mat.empty:
+        return pd.DataFrame(columns=["MaterialCode", "MaterialName", "RefPercent"])
+
+    usage = usage.copy()
+    usage["ProductID"] = pd.to_numeric(usage["ProductID"], errors="coerce")
+    usage = usage[usage["ProductID"] == product_id]
+
+    bom = usage.merge(mat, on="MaterialID", how="left")
+    bom["UsageFraction"] = pd.to_numeric(bom["UsageFraction"], errors="coerce").fillna(0.0)
+    bom["RefPercent"] = bom["UsageFraction"] * 100.0
+
+    bom = bom.groupby(["MaterialCode", "MaterialName"], as_index=False)["RefPercent"].sum()
+    bom = bom.sort_values("RefPercent", ascending=False).reset_index(drop=True)
+    return bom
+
+
+# ---------- Initialize material dropdown ----------
 materials_loaded = False
 codes_list = [""]
 name_map = {}
@@ -114,18 +166,52 @@ except Exception as e:
 
 # ---------- Sidebar ----------
 with st.sidebar:
-        tol_pct = st.slider(
+    st.header("Settings")
+
+    n = st.number_input("Number of ingredients", min_value=1, max_value=50, value=4, step=1)
+    rounding = st.selectbox("Rounding", ["No rounding", "1 g", "0.1 g", "0.01 g"], index=1)
+
+    st.divider()
+    st.subheader("Reference (optional)")
+
+    tol_pct = st.slider(
         "Reference tolerance (±%)",
         min_value=0.0,
         max_value=10.0,
         value=0.50,
         step=0.05,
         help="Highlights ingredients where |Manual% - Ref%| is greater than this tolerance."
-)
-    
-    st.header("Settings")
-    n = st.number_input("Number of ingredients", min_value=1, max_value=50, value=4, step=1)
-    rounding = st.selectbox("Rounding", ["No rounding", "1 g", "0.1 g", "0.01 g"], index=1)
+    )
+
+    ref = load_reference_tables()
+    pm = ref["product_master"]
+    pu = ref["units"]
+    wt = ref["wt"]
+
+    ref_product_id = None
+
+    if pm.empty:
+        st.caption("Reference files not found (ProductMaster.txt / ProductMaterialUsage.txt / MaterialMaster.txt).")
+    else:
+        ref_product_code = st.selectbox(
+            "Reference ProductCode",
+            options=[""] + pm["ProductCode"].dropna().unique().tolist(),
+            index=0
+        )
+
+        if ref_product_code:
+            ref_product_id = int(pd.to_numeric(
+                pm.loc[pm["ProductCode"] == ref_product_code, "ProductID"].iloc[0],
+                errors="coerce"
+            ))
+
+            unit_options = pu.loc[pu["ProductID"] == ref_product_id, "UnitType"].dropna().unique().tolist()
+            _ = st.selectbox("Reference Unit", options=[""] + unit_options, index=0)
+
+            wt_row = wt.loc[wt["ProductID"] == ref_product_id]
+            if not wt_row.empty:
+                target_lb = float(pd.to_numeric(wt_row["TargetWeightLB"], errors="coerce").fillna(0).iloc[0])
+                st.caption(f"Target weight (lb): {target_lb:,.4f}")
 
 round_step = 0.0 if rounding == "No rounding" else float(rounding.split()[0])
 
@@ -133,9 +219,9 @@ round_step = 0.0 if rounding == "No rounding" else float(rounding.split()[0])
 # ---------- Inputs ----------
 st.subheader("Batch Formula (RFT)")
 
-selected_codes = []
-selected_names = []
-old_g = []
+selected_codes: list[str] = []
+selected_names: list[str] = []
+old_g: list[float] = []
 
 for i in range(int(n)):
     col_code, col_weight = st.columns([1.3, 1.0])
@@ -199,21 +285,36 @@ if st.button("Calculate batch"):
         st.dataframe(df, hide_index=True, use_container_width=True)
         st.write(f"**Check sum:** {sum(final):,.4f} g")
 
-        pdf_bytes = build_batch_ticket_pdf(df, float(new_total), title="AWLMIX Batch Ticket - New Batch")
-        st.download_button(
-            "Download Batch Ticket (PDF)",
-            data=pdf_bytes,
-            file_name="AWLMIX_Batch_Ticket_New_Batch.pdf",
-            mime="application/pdf"
-        )
-        
-                view = comp.sort_values("MaterialCode")[["MaterialCode", "Manual_g", "ManualPercent", "RefPercent", "DeltaPercent"]].copy()
+        # ---- Optional Reference Compare ----
+        if ref_product_id:
+            bom = build_reference_bom(ref, ref_product_id)
 
-                # Format for display (optional, keeps it readable)
+            st.subheader("Reference BOM (advisory)")
+            if bom.empty:
+                st.info("Reference BOM not available (check MaterialMaster.txt mapping and ProductMaterialUsage.txt).")
+            else:
+                st.dataframe(bom, use_container_width=True)
+
+                manual_df = pd.DataFrame({"MaterialCode": selected_codes, "Manual_g": final})
+                manual_df["Manual_g"] = pd.to_numeric(manual_df["Manual_g"], errors="coerce").fillna(0.0)
+                manual_df = manual_df.groupby("MaterialCode", as_index=False)["Manual_g"].sum()
+
+                manual_total = float(manual_df["Manual_g"].sum()) if not manual_df.empty else 0.0
+                manual_df["ManualPercent"] = (manual_df["Manual_g"] / manual_total * 100.0) if manual_total > 0 else 0.0
+
+                comp = manual_df.merge(bom[["MaterialCode", "RefPercent"]], on="MaterialCode", how="outer")
+                comp["Manual_g"] = pd.to_numeric(comp["Manual_g"], errors="coerce").fillna(0.0)
+                comp["ManualPercent"] = pd.to_numeric(comp["ManualPercent"], errors="coerce").fillna(0.0)
+                comp["RefPercent"] = pd.to_numeric(comp["RefPercent"], errors="coerce").fillna(0.0)
+                comp["DeltaPercent"] = comp["ManualPercent"] - comp["RefPercent"]
+
+                view = comp.sort_values("MaterialCode")[["MaterialCode", "Manual_g", "ManualPercent", "RefPercent", "DeltaPercent"]].copy()
+                view["DeltaPercent_num"] = pd.to_numeric(view["DeltaPercent"], errors="coerce").fillna(0.0)
+
+                # Format numeric columns for display
                 view["Manual_g"] = view["Manual_g"].map(lambda x: f"{x:,.4f}")
                 view["ManualPercent"] = view["ManualPercent"].map(lambda x: f"{x:,.4f}")
                 view["RefPercent"] = view["RefPercent"].map(lambda x: f"{x:,.4f}")
-                view["DeltaPercent_num"] = pd.to_numeric(comp["DeltaPercent"], errors="coerce").fillna(0.0).values
                 view["DeltaPercent"] = view["DeltaPercent_num"].map(lambda x: f"{x:,.4f}")
 
                 def highlight_oos(row):
@@ -224,11 +325,15 @@ if st.button("Calculate batch"):
                 st.caption(f"Highlighted when |Delta%| > {tol_pct:.2f}%")
 
                 st.dataframe(
-                    view.drop(columns=["DeltaPercent_num"]).style.apply(highlight_oos, axis=1),
+                    view.style.apply(highlight_oos, axis=1),
                     use_container_width=True
                 )
 
-
-
-
-
+        # ---- PDF Download ----
+        pdf_bytes = build_batch_ticket_pdf(df, float(new_total), title="AWLMIX Batch Ticket - New Batch")
+        st.download_button(
+            "Download Batch Ticket (PDF)",
+            data=pdf_bytes,
+            file_name="AWLMIX_Batch_Ticket_New_Batch.pdf",
+            mime="application/pdf"
+        )
