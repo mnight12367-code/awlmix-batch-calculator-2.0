@@ -30,6 +30,26 @@ This app is designed to mirror **real-world production workflows**, where operat
 ---
 
 ## 🗂️ Repository Structure
+```
+awlmix-batch-calculator-2.0/
+│
+├── dynamic_batch_calculator.py   # Main Streamlit entry point
+├── requirements.txt              # Python dependencies (Streamlit Cloud)
+│
+├── MaterialMaster.csv            # Raw material master (codes & names)
+├── ProductMaster.txt             # Product identity master
+├── ProductMaterialUsage.txt      # Reference BOM (percent usage)
+├── ProductUnits.txt              # Allowed units per product
+├── ProductWeightTargets.txt      # Target weights by product
+├── PackagingMaster.txt           # Packaging source of truth (labels, packs)
+│
+└── pages/
+    ├── new_batch.py              # New Batch calculator + PDF ticket
+    ├── rework.py                 # Rework calculator + PDF ticket
+    ├── feasibility.py            # (Planned) inventory feasibility
+    └── inventory.py              # (Planned) inventory tracking
+```
+
 
 
 ---
@@ -78,6 +98,8 @@ These PDFs are intended to be:
 This app is designed for **Streamlit Cloud**.
 
 ### Dependencies
+
+
 Listed in `requirements.txt`:
 
 No local server is required.  
@@ -103,5 +125,6 @@ This project is intentionally built to:
 - Maintain human accountability
 - Support gradual ERP evolution
 
-Add project README and architecture overview
+
+
 
