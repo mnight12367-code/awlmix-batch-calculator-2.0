@@ -270,8 +270,6 @@ with st.sidebar:
     rounding = st.selectbox("Rounding", ["No rounding", "1 g", "0.1 g", "0.01 g"], index=1)
 
     st.divider()
-    st.subheader("Reference (optional)")
-    tol_pct = st.slider("Reference tolerance (±%)", 0.0, 10.0, 0.50, 0.05)
 
     ref_product_id = None
     ref_product_code = ""
@@ -456,13 +454,7 @@ if st.button("Calculate batch"):
             view_disp["RefPercent"] = view_disp["RefPercent"].map(lambda x: f"{x:,.4f}")
             view_disp["DeltaPercent"] = view_disp["DeltaPercent_num"].map(lambda x: f"{x:,.4f}")
 
-            st.subheader("Manual vs Reference (%)")
-            st.caption(f"Highlighted when |Delta%| > {tol_pct:.2f}%")
-
-            st.dataframe(
-                view_disp.style.apply(lambda r: highlight_oos(r, tol_pct), axis=1),
-                use_container_width=True
-            )
+           
 
     # PDF download
     pdf_bytes = build_batch_ticket_pdf(
@@ -480,6 +472,7 @@ if st.button("Calculate batch"):
         file_name="AWLMIX_Batch_Ticket_New_Batch.pdf",
         mime="application/pdf"
     )
+
 
 
 
