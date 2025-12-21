@@ -119,3 +119,26 @@ def get_on_hand():
     """, conn)
     conn.close()
     return df
+
+def get_on_hand_by_location(location_code: str, uom: str = "LB"):
+    """
+    Returns a DataFrame with columns:
+    MaterialCode, OnHand
+    for a specific LocationCode and UOM.
+
+    NOTE: No unit conversion yet. It matches exact UOM only.
+    """
+    conn = get_conn()
+    df = pd.read_sql("""
+        SELECT
+          m.MaterialCode AS MaterialCode,
+          ROUND(SUM(t.Qty), 4) AS OnHand
+        FROM InventoryTxn t
+        JOIN MaterialMaster m ON m.MaterialID = t.MaterialID
+        JOIN Locations l ON l.LocationID = t.LocationID
+        WHERE l.LocationCode = ?
+          AND t.UOM = ?
+        GROUP BY m.MaterialCode
+    """, conn, params=(location_code, uom))
+    conn.close()
+    return df
