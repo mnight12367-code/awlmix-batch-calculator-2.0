@@ -1,12 +1,13 @@
 import streamlit as st
+import sys
+from pathlib import Path
+
+# Ensure repo root is on Python path (fixes ModuleNotFoundError on Streamlit Cloud)
+ROOT_DIR = Path(__file__).resolve().parents[1]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
 from db import get_materials, get_locations, add_txn, get_on_hand
-
-st.title("Inventory")
-
-materials = get_materials()
-locations = get_locations()
-
-tab1, tab2, tab3 = st.tabs(["Receive Material", "Issue Material", "On-Hand"])
 
 # ---------------- RECEIVE ----------------
 with tab1:
@@ -79,3 +80,4 @@ with tab3:
     st.subheader("On-Hand Report")
     st.dataframe(get_on_hand(), use_container_width=True)
     st.caption("On-hand = SUM of all receipts/issues (ledger method).")
+
