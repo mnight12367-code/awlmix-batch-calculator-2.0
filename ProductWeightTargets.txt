@@ -1,3 +1,4 @@
+ProductID,ProductUnits,UnitType,TotalWeightPerUnitLB,TotalWeightPerUnitG
 1,1,"GLUS",11.17,5066.62
 2,1,"QTUS",2.79,1265.52
 3,2,"GLUS",11.26,5107.44
@@ -92,5 +93,6 @@
 92,46,"QTUS",2.81,1274.59
 93,47,"GLUS",11.35,5148.26
 94,47,"QTUS",2.83,1283.66
+
 
 
