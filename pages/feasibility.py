@@ -2,6 +2,40 @@ import streamlit as st
 import sys
 from pathlib import Path
 import pandas as pd
+import pandas as pd
+import streamlit as st
+
+def read_csv_debug(path):
+    seps = [",", "\t", "|", ";"]
+    best = None
+    best_cols = 0
+    best_sep = None
+    last_err = None
+
+    for sep in seps:
+        try:
+            df = pd.read_csv(
+                path,
+                sep=sep,
+                engine="python",
+                dtype=str,
+                keep_default_na=False,
+                on_bad_lines="skip",   # keeps the app alive
+            )
+            if df.shape[1] > best_cols:
+                best = df
+                best_cols = df.shape[1]
+                best_sep = sep
+        except Exception as e:
+            last_err = e
+
+    if best is None:
+        raise last_err
+
+    st.caption(f"Parsed {path.name} using delimiter {repr(best_sep)} → {best.shape[1]} columns, {len(best)} rows")
+    st.write("Columns:", list(best.columns))
+    return best
+
 
 # Streamlit Cloud safe import
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -170,6 +204,7 @@ if fails == 0:
 else:
     st.error(f"❌ NOT FEASIBLE: {fails} material(s) are short. See Shortage column.")
     st.caption("Tip: Receive inventory for the missing materials, or reduce units.")
+
 
 
 
