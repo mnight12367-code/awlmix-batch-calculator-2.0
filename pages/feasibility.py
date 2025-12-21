@@ -60,6 +60,11 @@ prod_df.columns = [str(c).strip() for c in prod_df.columns]
 wt_df = pd.read_csv(WEIGHT_TARGETS_PATH, sep=",", engine="python")
 wt_df.columns = [str(c).strip() for c in wt_df.columns]
 
+bom_df = pd.read_csv(BOM_PATH, sep=",", engine="python")
+bom_df.columns = [str(c).strip() for c in bom_df.columns]
+bom_df.columns = bom_df.columns.str.replace("\ufeff", "", regex=False).str.strip()
+
+
 # Material mapping (MaterialID -> MaterialCode)
 mat_id_to_code = {}
 if MATERIAL_MASTER_CSV.exists():
@@ -165,6 +170,7 @@ if fails == 0:
 else:
     st.error(f"❌ NOT FEASIBLE: {fails} material(s) are short. See Shortage column.")
     st.caption("Tip: Receive inventory for the missing materials, or reduce units.")
+
 
 
 
