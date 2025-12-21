@@ -85,6 +85,9 @@ def require_columns(df: pd.DataFrame, required: list, filename: str):
         st.stop()
 
 
+
+bom_df = pd.read_csv(BOM_PATH, sep=",", engine="python")
+
 # ---------- Load tables ----------
 prod_df = read_csv_debug(PRODUCT_MASTER_PATH)
 wt_df   = read_csv_debug(WEIGHT_TARGETS_PATH)
@@ -206,6 +209,7 @@ if fails == 0:
 else:
     st.error(f"❌ NOT FEASIBLE: {fails} material(s) are short. See Shortage column.")
     st.caption("Tip: Receive inventory for the missing materials, or reduce units.")
+
 
 
 
