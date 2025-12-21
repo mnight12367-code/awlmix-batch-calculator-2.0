@@ -54,10 +54,11 @@ def require_columns(df: pd.DataFrame, required: list, filename: str):
 
 
 # ---------- Load tables ----------
-prod_df = read_csv_flexible(PRODUCT_MASTER_PATH)
-bom_df = pd.read_csv(BOM_PATH, sep=",", engine="python") 
-bom_df.columns = [str(c).strip() for c in bom_df.columns]
-wt_df = read_csv_flexible(WEIGHT_TARGETS_PATH)
+prod_df = pd.read_csv(PRODUCT_MASTER_PATH, sep=",", engine="python")
+prod_df.columns = [str(c).strip() for c in prod_df.columns]
+
+wt_df = pd.read_csv(WEIGHT_TARGETS_PATH, sep=",", engine="python")
+wt_df.columns = [str(c).strip() for c in wt_df.columns]
 
 # Material mapping (MaterialID -> MaterialCode)
 mat_id_to_code = {}
@@ -164,5 +165,6 @@ if fails == 0:
 else:
     st.error(f"❌ NOT FEASIBLE: {fails} material(s) are short. See Shortage column.")
     st.caption("Tip: Receive inventory for the missing materials, or reduce units.")
+
 
 
