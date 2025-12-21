@@ -2,8 +2,6 @@ import streamlit as st
 import sys
 from pathlib import Path
 import pandas as pd
-import pandas as pd
-import streamlit as st
 
 def read_csv_debug(path):
     seps = [",", "\t", "|", ";"]
@@ -88,15 +86,19 @@ def require_columns(df: pd.DataFrame, required: list, filename: str):
 
 
 # ---------- Load tables ----------
-prod_df = pd.read_csv(PRODUCT_MASTER_PATH, sep=",", engine="python")
-prod_df.columns = [str(c).strip() for c in prod_df.columns]
+prod_df = read_csv_debug(PRODUCT_MASTER_PATH)
+wt_df   = read_csv_debug(WEIGHT_TARGETS_PATH)
+bom_df  = read_csv_debug(BOM_PATH)
 
-wt_df = pd.read_csv(WEIGHT_TARGETS_PATH, sep=",", engine="python")
-wt_df.columns = [str(c).strip() for c in wt_df.columns]
+# normalize column names
+for df in (prod_df, wt_df, bom_df):
+    df.columns = (
+        pd.Index(df.columns)
+        .astype(str)
+        .str.replace("\ufeff", "", regex=False)
+        .str.strip()
+    )
 
-bom_df = pd.read_csv(BOM_PATH, sep=",", engine="python")
-bom_df.columns = [str(c).strip() for c in bom_df.columns]
-bom_df.columns = bom_df.columns.str.replace("\ufeff", "", regex=False).str.strip()
 
 
 # Material mapping (MaterialID -> MaterialCode)
@@ -204,6 +206,7 @@ if fails == 0:
 else:
     st.error(f"❌ NOT FEASIBLE: {fails} material(s) are short. See Shortage column.")
     st.caption("Tip: Receive inventory for the missing materials, or reduce units.")
+
 
 
 
