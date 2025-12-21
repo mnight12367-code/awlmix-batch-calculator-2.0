@@ -1,0 +1,11 @@
+# SQLite databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Streamlit / Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.streamlit/
