@@ -112,16 +112,30 @@ for df in (prod_df, wt_df, bom_df):
 
 
 
-# Material mapping (MaterialID -> MaterialCode)
+# ---------- Material mapping (MaterialID -> MaterialCode) ----------
 mat_id_to_code = {}
+
 if MATERIAL_MASTER_CSV.exists():
-    mm = read_csv_flexible(MATERIAL_MASTER_CSV)
-    # accept a few common column spellings
-    colmap = {c.lower(): c for c in mm.columns}
-    if "materialid" in colmap and "materialcode" in colmap:
-        mid = colmap["materialid"]
-        mcode = colmap["materialcode"]
-        mat_id_to_code = dict(zip(mm[mid].astype(str), mm[mcode].astype(str)))
+    mm = pd.read_csv(MATERIAL_MASTER_CSV, dtype=str)
+    mm.columns = mm.columns.str.strip()
+
+    # normalize column names
+    mm_cols = {c.lower(): c for c in mm.columns}
+
+    if "materialid" in mm_cols and "materialcode" in mm_cols:
+        mid_col = mm_cols["materialid"]
+        code_col = mm_cols["materialcode"]
+
+        mat_id_to_code = (
+            mm[[mid_col, code_col]]
+            .dropna()
+            .astype(str)
+            .set_index(mid_col)[code_col]
+            .to_dict()
+        )
+
+    st.caption(f"Loaded MaterialMaster.csv → {len(mat_id_to_code)} material mappings")
+
 
 # ---------- Validate schema ----------
 require_columns(prod_df, ["ProductID", "ProductCode", "ProductName"], "ProductMaster.txt")
@@ -217,6 +231,7 @@ if fails == 0:
 else:
     st.error(f"❌ NOT FEASIBLE: {fails} material(s) are short. See Shortage column.")
     st.caption("Tip: Receive inventory for the missing materials, or reduce units.")
+
 
 
 
