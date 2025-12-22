@@ -86,7 +86,15 @@ def require_columns(df: pd.DataFrame, required: list, filename: str):
 
 
 
-bom_df = pd.read_csv(BOM_PATH, sep=",", engine="python")
+bom_df = read_csv_debug(BOM_PATH)
+
+bom_df.columns = (
+    pd.Index(bom_df.columns)
+    .astype(str)
+    .str.replace("\ufeff", "", regex=False)
+    .str.strip()
+)
+
 
 # ---------- Load tables ----------
 prod_df = read_csv_debug(PRODUCT_MASTER_PATH)
@@ -209,6 +217,7 @@ if fails == 0:
 else:
     st.error(f"❌ NOT FEASIBLE: {fails} material(s) are short. See Shortage column.")
     st.caption("Tip: Receive inventory for the missing materials, or reduce units.")
+
 
 
 
