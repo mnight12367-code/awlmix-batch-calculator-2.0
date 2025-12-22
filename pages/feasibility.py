@@ -136,7 +136,7 @@ if MATERIAL_MASTER_CSV.exists():
         )
 
     st.caption(f"Loaded MaterialMaster.csv → {len(mat_id_to_code)} material mappings")
-st.write("BOM material mapping preview:", bom_rows[["MaterialCode", "Material"]].drop_duplicates())
+
 
 # ---------- Validate schema ----------
 require_columns(prod_df, ["ProductID", "ProductCode", "ProductName"], "ProductMaster.txt")
@@ -232,6 +232,7 @@ if fails == 0:
 else:
     st.error(f"❌ NOT FEASIBLE: {fails} material(s) are short. See Shortage column.")
     st.caption("Tip: Receive inventory for the missing materials, or reduce units.")
+
 
 
 
