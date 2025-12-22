@@ -113,6 +113,8 @@ for df in (prod_df, wt_df, bom_df):
 
 
 # ---------- Material mapping (MaterialID -> MaterialCode) ----------
+st.write("BOM material mapping preview:", bom_rows[["MaterialCode", "Material"]].drop_duplicates())
+
 mat_id_to_code = {}
 
 if MATERIAL_MASTER_CSV.exists():
@@ -231,6 +233,7 @@ if fails == 0:
 else:
     st.error(f"❌ NOT FEASIBLE: {fails} material(s) are short. See Shortage column.")
     st.caption("Tip: Receive inventory for the missing materials, or reduce units.")
+
 
 
 
