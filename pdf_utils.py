@@ -17,8 +17,9 @@ def generate_multi_issue_pdf(
     """
     ONE PDF with a table of multiple issued materials.
 
-    Each line dict should contain:
-      MaterialCode, MaterialName, LocationCode, Lot, Qty, UOM, Notes
+    Each line dict should contain (at minimum):
+      SapCode_Raw, SapCode_Finished, MaterialCode, MaterialName,
+      LocationCode, Lot, Qty, UOM, Notes
     """
     issued_at = issued_at or datetime.now()
     buf = BytesIO()
@@ -44,31 +45,64 @@ def generate_multi_issue_pdf(
         story.append(Paragraph(f"<b>Header Notes:</b> {header_notes.strip()}", styles["Normal"]))
     story.append(Spacer(1, 12))
 
-    data = [["MaterialCode", "MaterialName", "Location", "Lot", "Qty", "UOM", "Notes"]]
+    # ✅ Susan preferred order: SapCode_Raw, SapCode_Finished, MaterialCode
+    data = [[
+        "SapCode_Raw",
+        "SapCode_Finished",
+        "MaterialCode",
+        "MaterialName",
+        "Location",
+        "Lot",
+        "Qty",
+        "UOM",
+        "Notes",
+    ]]
+
     for ln in lines:
+        qty_val = ln.get("Qty", 0.0) or 0.0
+        try:
+            qty_str = f"{float(qty_val):.4f}"
+        except Exception:
+            qty_str = str(qty_val)
+
         data.append([
-            str(ln.get("MaterialCode", "")),
-            str(ln.get("MaterialName", "")),
-            str(ln.get("LocationCode", "")),
-            str(ln.get("Lot", "")),
-            f"{float(ln.get('Qty', 0.0)):.4f}",
-            str(ln.get("UOM", "")),
-            str(ln.get("Notes", "") or header_notes),  # ✅ HERE
+            str(ln.get("SapCode_Raw", "") or ""),
+            str(ln.get("SapCode_Finished", "") or ""),
+            str(ln.get("MaterialCode", "") or ""),
+            str(ln.get("MaterialName", "") or ""),
+            str(ln.get("LocationCode", "") or ""),
+            str(ln.get("Lot", "") or ""),
+            qty_str,
+            str(ln.get("UOM", "") or ""),
+            str(ln.get("Notes", "") or header_notes),
         ])
 
-    table = Table(data, repeatRows=1, colWidths=[85, 150, 65, 70, 55, 40, 115])
+    # Column widths tuned for Letter portrait (sum ~ 540 points with 0.5" margins)
+    table = Table(
+        data,
+        repeatRows=1,
+        colWidths=[80, 95, 80, 105, 55, 55, 40, 35, 95]
+    )
+
     table.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
         ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("FONTSIZE", (0, 0), (-1, 0), 9),
-        ("FONTSIZE", (0, 1), (-1, -1), 8),
+        ("FONTSIZE", (0, 0), (-1, 0), 8),
+
+        ("FONTNAME", (0, 1), (-1, -1), "Helvetica"),
+        ("FONTSIZE", (0, 1), (-1, -1), 7),
+
         ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
         ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.whitesmoke]),
+
         ("LEFTPADDING", (0, 0), (-1, -1), 4),
         ("RIGHTPADDING", (0, 0), (-1, -1), 4),
         ("TOPPADDING", (0, 0), (-1, -1), 3),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+
+        # Align Qty right for readability
+        ("ALIGN", (6, 1), (6, -1), "RIGHT"),
     ]))
 
     story.append(table)
@@ -78,4 +112,3 @@ def generate_multi_issue_pdf(
     doc.build(story)
     buf.seek(0)
     return buf
-
