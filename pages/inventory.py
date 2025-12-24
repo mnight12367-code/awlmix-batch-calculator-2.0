@@ -92,8 +92,34 @@ with tab2:
             st.success("Issue posted.")
             st.rerun()
 
+
+if st.button("Issue Material (Manual)"):
+    pdf_buffer = generate_manual_issue_pdf(
+        material_rows=[
+            {
+                "MaterialCode": "OQ8154",
+                "MaterialName": "White (4906991 / 5504940)",
+                "LB": issued_lb,
+                "KG": issued_lb * 0.453592,
+            }
+        ],
+        location=location_code,
+        issued_by="Michael",
+        reason=st.session_state.get("issue_reason", "")
+    )
+
+    st.download_button(
+        label="📄 Download Issue Record (PDF)",
+        data=pdf_buffer,
+        file_name=f"manual_issue_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
+        mime="application/pdf",
+    )
+
+    st.success("Manual issue recorded. PDF generated.")
+
 # ---------------- ON HAND ----------------
 with tab3:
     st.subheader("On-Hand Report")
     st.dataframe(get_on_hand(), use_container_width=True)
     st.caption("On-hand = SUM of all receipts/issues (ledger method).")
+
