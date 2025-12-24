@@ -163,6 +163,7 @@ with tab1:
 
 
 # ---------------- ISSUE ----------------
+# ---------------- ISSUE ----------------
 with tab2:
     st.subheader("Issue Material (Manual) — Multiple Materials")
 
@@ -199,12 +200,34 @@ with tab2:
     notes2 = st.text_area("Line notes (optional)", key="issue_notes", value="")
 
     colA, colB = st.columns([1, 1])
+
     with colA:
         if st.button("➕ Add line to issue list"):
             if qty2 <= 0:
                 st.error("Quantity must be greater than 0.")
             else:
-        
+                material_code = materials.loc[materials.MaterialID == mat2, "MaterialCode"].values[0]
+                material_name = materials.loc[materials.MaterialID == mat2, "MaterialName"].values[0]
+                location_code = locations.loc[locations.LocationID == loc2, "LocationCode"].values[0]
+
+                # ✅ pull SAP codes from MaterialMaster.csv
+                sap_raw = str(materials.loc[materials.MaterialID == mat2, "SapCode_Raw"].values[0])
+                sap_finished = str(materials.loc[materials.MaterialID == mat2, "SapCode_Finished"].values[0])
+
+                st.session_state.issue_cart.append({
+                    "MaterialID": mat2,
+                    "SapCode_Raw": sap_raw,
+                    "SapCode_Finished": sap_finished,
+                    "MaterialCode": material_code,
+                    "MaterialName": material_name,
+                    "LocationID": loc2,
+                    "LocationCode": location_code,
+                    "Lot": lot2.strip(),
+                    "Qty": float(qty2),
+                    "UOM": uom2,
+                    "Notes": notes2.strip(),
+                })
+
                 st.success(f"Added: {material_code} ({qty2} {uom2})")
 
     with colB:
@@ -219,39 +242,15 @@ with tab2:
     if len(st.session_state.issue_cart) == 0:
         st.info("No lines added yet. Add materials above.")
     else:
-        material_code = materials.loc[materials.MaterialID == mat2, "MaterialCode"].values[0]
-material_name = materials.loc[materials.MaterialID == mat2, "MaterialName"].values[0]
-location_code = locations.loc[locations.LocationID == loc2, "LocationCode"].values[0]
-
-# ✅ NEW: pull SAP codes from MaterialMaster.csv
-sap_raw = str(materials.loc[materials.MaterialID == mat2, "SapCode_Raw"].values[0])
-sap_finished = str(materials.loc[materials.MaterialID == mat2, "SapCode_Finished"].values[0])
-
-st.session_state.issue_cart.append({
-    "MaterialID": mat2,
-    "SapCode_Raw": sap_raw,
-    "SapCode_Finished": sap_finished,
-    "MaterialCode": material_code,
-    "MaterialName": material_name,
-    "LocationID": loc2,
-    "LocationCode": location_code,
-    "Lot": lot2.strip(),
-    "Qty": float(qty2),
-    "UOM": uom2,
-    "Notes": notes2.strip(),
-})
-
         df_cart = pd.DataFrame(st.session_state.issue_cart)[
-    ["SapCode_Raw", "SapCode_Finished", "MaterialCode", "MaterialName", "LocationCode", "Lot", "Qty", "UOM", "Notes"]
-]
-
+            ["SapCode_Raw", "SapCode_Finished", "MaterialCode", "MaterialName", "LocationCode", "Lot", "Qty", "UOM", "Notes"]
+        ]
         st.dataframe(df_cart, width="stretch", hide_index=True)
 
         issued_by = st.text_input("Issued By (name)", key="issue_by", value="")
         header_notes = st.text_area("Header notes (optional)", key="issue_header_notes", value="")
 
         if st.button("Post Issue (ALL lines)", type="primary"):
-            # Safety
             if len(st.session_state.issue_cart) == 0:
                 st.error("Nothing to post.")
                 st.stop()
@@ -306,11 +305,13 @@ st.session_state.issue_cart.append({
             st.rerun()
 
 
+
 # ---------------- ON HAND ----------------
 with tab3:
     st.subheader("On-Hand Report")
     st.dataframe(get_on_hand(), use_container_width=True)
     st.caption("On-hand = SUM of all receipts/issues (ledger method).")
+
 
 
 
