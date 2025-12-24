@@ -3,10 +3,8 @@ import pandas as pd
 import sys
 from pathlib import Path
 from datetime import datetime
-from pdf_utils import generate_multi_issue_pdf
-from datetime import datetime
-from io import BytesIO
 
+from pdf_utils import generate_multi_issue_pdf
 
 # Ensure repo root is on Python path (fixes ModuleNotFoundError on Streamlit Cloud)
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -29,14 +27,12 @@ if locations.empty:
     st.error("Locations table is empty.")
     st.stop()
 
-# ✅ Tabs must be created BEFORE using tab1/tab2/tab3
 tab1, tab2, tab3 = st.tabs(["Receive Material", "Issue Material", "On-Hand"])
 
 # ---------------- RECEIVE ----------------
 with tab1:
     st.subheader("Receive Material — Multiple Materials")
 
-    # --- session cart for receipts ---
     if "receipt_cart" not in st.session_state:
         st.session_state.receipt_cart = []
 
@@ -45,7 +41,6 @@ with tab1:
     if "last_receipt_pdf_name" not in st.session_state:
         st.session_state.last_receipt_pdf_name = ""
 
-    # --- pick ONE line to add ---
     mat_r = st.selectbox(
         "Material",
         materials["MaterialID"],
@@ -98,7 +93,6 @@ with tab1:
 
     st.divider()
 
-    # --- show current receipt cart ---
     st.subheader("Receive list (will post all lines)")
     if len(st.session_state.receipt_cart) == 0:
         st.info("No lines added yet. Add materials above.")
@@ -116,22 +110,20 @@ with tab1:
                 st.error("Nothing to post.")
                 st.stop()
 
-            # 1) Post each line as a receipt txn
             for line in st.session_state.receipt_cart:
                 add_txn(
                     line["MaterialID"],
                     line["LocationID"],
                     line["Lot"],
                     "RECEIPT",
-                    float(line["Qty"]),          # positive for receipt
+                    float(line["Qty"]),
                     line["UOM"],
                     (line["Notes"] or header_notes).strip()
                 )
 
-            # 2) Optional: generate ONE PDF for all lines (stored for download after rerun)
             pdf_buf = generate_multi_issue_pdf(
                 lines=st.session_state.receipt_cart,
-                issued_by=received_by.strip() or "Unknown",   # reusing field name
+                issued_by=received_by.strip() or "Unknown",
                 header_notes=header_notes.strip(),
                 issued_at=datetime.now(),
             )
@@ -141,11 +133,9 @@ with tab1:
 
             st.success(f"Posted {len(st.session_state.receipt_cart)} receipt line(s). PDF ready below.")
 
-            # Clear cart
             st.session_state.receipt_cart = []
             st.rerun()
 
-    # --- Download last receipt PDF ---
     if st.session_state.last_receipt_pdf:
         st.divider()
         st.subheader("Last posted receipt PDF")
@@ -163,11 +153,9 @@ with tab1:
 
 
 # ---------------- ISSUE ----------------
-# ---------------- ISSUE ----------------
 with tab2:
     st.subheader("Issue Material (Manual) — Multiple Materials")
 
-    # --- session state ---
     if "issue_cart" not in st.session_state:
         st.session_state.issue_cart = []
 
@@ -176,7 +164,6 @@ with tab2:
     if "last_issue_pdf_name" not in st.session_state:
         st.session_state.last_issue_pdf_name = ""
 
-    # --- pick ONE line to add ---
     mat2 = st.selectbox(
         "Material",
         materials["MaterialID"],
@@ -200,7 +187,6 @@ with tab2:
     notes2 = st.text_area("Line notes (optional)", key="issue_notes", value="")
 
     colA, colB = st.columns([1, 1])
-
     with colA:
         if st.button("➕ Add line to issue list"):
             if qty2 <= 0:
@@ -210,14 +196,8 @@ with tab2:
                 material_name = materials.loc[materials.MaterialID == mat2, "MaterialName"].values[0]
                 location_code = locations.loc[locations.LocationID == loc2, "LocationCode"].values[0]
 
-                # ✅ pull SAP codes from MaterialMaster.csv
-                sap_raw = str(materials.loc[materials.MaterialID == mat2, "SapCode_Raw"].values[0])
-                sap_finished = str(materials.loc[materials.MaterialID == mat2, "SapCode_Finished"].values[0])
-
                 st.session_state.issue_cart.append({
                     "MaterialID": mat2,
-                    "SapCode_Raw": sap_raw,
-                    "SapCode_Finished": sap_finished,
                     "MaterialCode": material_code,
                     "MaterialName": material_name,
                     "LocationID": loc2,
@@ -227,7 +207,6 @@ with tab2:
                     "UOM": uom2,
                     "Notes": notes2.strip(),
                 })
-
                 st.success(f"Added: {material_code} ({qty2} {uom2})")
 
     with colB:
@@ -237,13 +216,12 @@ with tab2:
 
     st.divider()
 
-    # --- show current cart ---
     st.subheader("Issue list (will post all lines)")
     if len(st.session_state.issue_cart) == 0:
         st.info("No lines added yet. Add materials above.")
     else:
         df_cart = pd.DataFrame(st.session_state.issue_cart)[
-            ["SapCode_Raw", "SapCode_Finished", "MaterialCode", "MaterialName", "LocationCode", "Lot", "Qty", "UOM", "Notes"]
+            ["MaterialCode", "MaterialName", "LocationCode", "Lot", "Qty", "UOM", "Notes"]
         ]
         st.dataframe(df_cart, width="stretch", hide_index=True)
 
@@ -255,10 +233,8 @@ with tab2:
                 st.error("Nothing to post.")
                 st.stop()
 
-            # IMPORTANT: copy cart NOW so PDF uses the same lines even after we clear it
             lines_for_pdf = list(st.session_state.issue_cart)
 
-            # 1) Post each line (negative qty)
             for line in lines_for_pdf:
                 add_txn(
                     line["MaterialID"],
@@ -270,7 +246,6 @@ with tab2:
                     (line["Notes"] or header_notes).strip()
                 )
 
-            # 2) Generate ONE PDF for all lines
             pdf_buf = generate_multi_issue_pdf(
                 lines=lines_for_pdf,
                 issued_by=issued_by.strip() or "Unknown",
@@ -278,17 +253,14 @@ with tab2:
                 issued_at=datetime.now(),
             )
 
-            # 3) Save PDF bytes so download works AFTER rerun
             st.session_state.last_issue_pdf = pdf_buf.getvalue()
             st.session_state.last_issue_pdf_name = f"manual_issue_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
 
             st.success(f"Posted {len(lines_for_pdf)} issue line(s). PDF ready below.")
 
-            # Clear cart
             st.session_state.issue_cart = []
             st.rerun()
 
-    # --- Download last Issue PDF (after rerun) ---
     if st.session_state.last_issue_pdf:
         st.divider()
         st.subheader("Last posted issue PDF")
@@ -305,20 +277,13 @@ with tab2:
             st.rerun()
 
 
-
 # ---------------- ON HAND ----------------
 with tab3:
     st.subheader("On-Hand Report")
     st.dataframe(get_on_hand(), use_container_width=True)
     st.caption("On-hand = SUM of all receipts/issues (ledger method).")
 
-
-
-
-
-
-
-
+   
 
 
 
