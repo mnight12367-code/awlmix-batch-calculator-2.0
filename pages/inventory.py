@@ -34,35 +34,133 @@ tab1, tab2, tab3 = st.tabs(["Receive Material", "Issue Material", "On-Hand"])
 
 # ---------------- RECEIVE ----------------
 with tab1:
-    st.subheader("Receive Material")
+    st.subheader("Receive Material — Multiple Materials")
 
-    mat = st.selectbox(
+    # --- session cart for receipts ---
+    if "receipt_cart" not in st.session_state:
+        st.session_state.receipt_cart = []
+
+    if "last_receipt_pdf" not in st.session_state:
+        st.session_state.last_receipt_pdf = None
+    if "last_receipt_pdf_name" not in st.session_state:
+        st.session_state.last_receipt_pdf_name = ""
+
+    # --- pick ONE line to add ---
+    mat_r = st.selectbox(
         "Material",
         materials["MaterialID"],
+        key="rcv_mat",
         format_func=lambda x:
             f"{materials.loc[materials.MaterialID==x,'MaterialCode'].values[0]} - "
             f"{materials.loc[materials.MaterialID==x,'MaterialName'].values[0]}"
     )
 
-    loc = st.selectbox(
+    loc_r = st.selectbox(
         "Location",
         locations["LocationID"],
+        key="rcv_loc",
         format_func=lambda x:
             locations.loc[locations.LocationID==x, "LocationCode"].values[0]
     )
 
-    lot = st.text_input("Lot / Batch # (optional)", value="")
-    qty = st.number_input("Quantity Received (positive)", min_value=0.0, step=1.0, format="%.4f")
-    uom = st.selectbox("UOM", ["LB", "KG", "GAL", "EA"])
-    notes = st.text_area("Notes (optional)", value="")
+    lot_r = st.text_input("Lot / Batch # (optional)", key="rcv_lot", value="")
+    qty_r = st.number_input("Quantity Received (positive)", key="rcv_qty", min_value=0.0, step=1.0, format="%.4f")
+    uom_r = st.selectbox("UOM", ["LB", "KG", "GAL", "EA"], key="rcv_uom")
+    notes_r = st.text_area("Line notes (optional)", key="rcv_notes", value="")
 
-    if st.button("Post Receipt", type="primary"):
-        if qty <= 0:
-            st.error("Quantity must be greater than 0.")
-        else:
-            add_txn(mat, loc, lot.strip(), "RECEIPT", float(qty), uom, notes.strip())
-            st.success("Receipt posted.")
+    colA, colB = st.columns([1, 1])
+    with colA:
+        if st.button("➕ Add line to receive list"):
+            if qty_r <= 0:
+                st.error("Quantity must be greater than 0.")
+            else:
+                material_code = materials.loc[materials.MaterialID == mat_r, "MaterialCode"].values[0]
+                material_name = materials.loc[materials.MaterialID == mat_r, "MaterialName"].values[0]
+                location_code = locations.loc[locations.LocationID == loc_r, "LocationCode"].values[0]
+
+                st.session_state.receipt_cart.append({
+                    "MaterialID": mat_r,
+                    "MaterialCode": material_code,
+                    "MaterialName": material_name,
+                    "LocationID": loc_r,
+                    "LocationCode": location_code,
+                    "Lot": lot_r.strip(),
+                    "Qty": float(qty_r),
+                    "UOM": uom_r,
+                    "Notes": notes_r.strip(),
+                })
+                st.success(f"Added: {material_code} ({qty_r} {uom_r})")
+
+    with colB:
+        if st.button("🧹 Clear receive list"):
+            st.session_state.receipt_cart = []
             st.rerun()
+
+    st.divider()
+
+    # --- show current receipt cart ---
+    st.subheader("Receive list (will post all lines)")
+    if len(st.session_state.receipt_cart) == 0:
+        st.info("No lines added yet. Add materials above.")
+    else:
+        df_rcv = pd.DataFrame(st.session_state.receipt_cart)[
+            ["MaterialCode", "MaterialName", "LocationCode", "Lot", "Qty", "UOM", "Notes"]
+        ]
+        st.dataframe(df_rcv, width="stretch", hide_index=True)
+
+        received_by = st.text_input("Received By (name)", key="rcv_by", value="")
+        header_notes = st.text_area("Header notes (optional)", key="rcv_header_notes", value="")
+
+        if st.button("Post Receipt (ALL lines)", type="primary"):
+            if len(st.session_state.receipt_cart) == 0:
+                st.error("Nothing to post.")
+                st.stop()
+
+            # 1) Post each line as a receipt txn
+            for line in st.session_state.receipt_cart:
+                add_txn(
+                    line["MaterialID"],
+                    line["LocationID"],
+                    line["Lot"],
+                    "RECEIPT",
+                    float(line["Qty"]),          # positive for receipt
+                    line["UOM"],
+                    (line["Notes"] or header_notes).strip()
+                )
+
+            # 2) Optional: generate ONE PDF for all lines (stored for download after rerun)
+            pdf_buf = generate_multi_issue_pdf(
+                lines=st.session_state.receipt_cart,
+                issued_by=received_by.strip() or "Unknown",   # reusing field name
+                header_notes=header_notes.strip(),
+                issued_at=datetime.now(),
+            )
+
+            st.session_state.last_receipt_pdf = pdf_buf.getvalue()
+            st.session_state.last_receipt_pdf_name = f"manual_receipt_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+
+            st.success(f"Posted {len(st.session_state.receipt_cart)} receipt line(s). PDF ready below.")
+
+            # Clear cart
+            st.session_state.receipt_cart = []
+            st.rerun()
+
+    # --- Download last receipt PDF ---
+    if st.session_state.last_receipt_pdf:
+        st.divider()
+        st.subheader("Last posted receipt PDF")
+        st.download_button(
+            label="📄 Download Receipt Record (PDF)",
+            data=st.session_state.last_receipt_pdf,
+            file_name=st.session_state.last_receipt_pdf_name or "manual_receipt.pdf",
+            mime="application/pdf",
+            use_container_width=True,
+        )
+        if st.button("Clear last receipt PDF"):
+            st.session_state.last_receipt_pdf = None
+            st.session_state.last_receipt_pdf_name = ""
+            st.rerun()
+
 
 # ---------------- ISSUE ----------------
 with tab2:
@@ -177,6 +275,7 @@ with tab3:
     st.subheader("On-Hand Report")
     st.dataframe(get_on_hand(), use_container_width=True)
     st.caption("On-hand = SUM of all receipts/issues (ledger method).")
+
 
 
 
