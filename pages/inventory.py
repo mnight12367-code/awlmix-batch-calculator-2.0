@@ -3,6 +3,9 @@ import sys
 from pathlib import Path
 from datetime import datetime
 from pdf_utils import generate_manual_issue_pdf
+from datetime import datetime
+from io import BytesIO
+
 
 # Ensure repo root is on Python path (fixes ModuleNotFoundError on Streamlit Cloud)
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -62,8 +65,13 @@ with tab1:
 
 # ---------------- ISSUE ----------------
 with tab2:
-    st.subheader("Issue Material (Manual)")
+    st.subheader("Issue Material (Manual) — Multiple Materials")
 
+    # --- session cart ---
+    if "issue_cart" not in st.session_state:
+        st.session_state.issue_cart = []
+
+    # --- pick ONE line to add ---
     mat2 = st.selectbox(
         "Material",
         materials["MaterialID"],
@@ -84,75 +92,87 @@ with tab2:
     lot2 = st.text_input("Lot / Batch # (optional)", key="issue_lot", value="")
     qty2 = st.number_input("Quantity Issued (positive)", key="issue_qty", min_value=0.0, step=1.0, format="%.4f")
     uom2 = st.selectbox("UOM", ["LB", "KG", "GAL", "EA"], key="issue_uom")
-    notes2 = st.text_area("Notes (optional)", key="issue_notes", value="")
+    notes2 = st.text_area("Line notes (optional)", key="issue_notes", value="")
 
-    issued_by = st.text_input("Issued By (name)", key="issue_by", value="")
+    colA, colB = st.columns([1, 1])
+    with colA:
+        if st.button("➕ Add line to issue list"):
+            if qty2 <= 0:
+                st.error("Quantity must be greater than 0.")
+            else:
+                material_code = materials.loc[materials.MaterialID == mat2, "MaterialCode"].values[0]
+                material_name = materials.loc[materials.MaterialID == mat2, "MaterialName"].values[0]
+                location_code = locations.loc[locations.LocationID == loc2, "LocationCode"].values[0]
 
-    if st.button("Post Issue + Generate PDF", type="primary"):
-        if qty2 <= 0:
-            st.error("Quantity must be greater than 0.")
-        else:
-            # Post transaction (negative quantity)
-            add_txn(mat2, loc2, lot2.strip(), "ISSUE", float(-qty2), uom2, notes2.strip())
+                st.session_state.issue_cart.append({
+                    "MaterialID": mat2,
+                    "MaterialCode": material_code,
+                    "MaterialName": material_name,
+                    "LocationID": loc2,
+                    "LocationCode": location_code,
+                    "Lot": lot2.strip(),
+                    "Qty": float(qty2),
+                    "UOM": uom2,
+                    "Notes": notes2.strip(),
+                })
+                st.success(f"Added: {material_code} ({qty2} {uom2})")
 
-            # Look up codes/names for PDF
-            material_code = materials.loc[materials.MaterialID == mat2, "MaterialCode"].values[0]
-            material_name = materials.loc[materials.MaterialID == mat2, "MaterialName"].values[0]
-            location_code = locations.loc[locations.LocationID == loc2, "LocationCode"].values[0]
+    with colB:
+        if st.button("🧹 Clear list"):
+            st.session_state.issue_cart = []
+            st.rerun()
 
-            pdf_buf = generate_manual_issue_pdf(
-                material_code=material_code,
-                material_name=material_name,
-                location_code=location_code,
-                lot=lot2.strip(),
-                qty=float(qty2),
-                uom=uom2,
-                notes=notes2.strip(),
-                issued_by=issued_by.strip() or "Unknown",
-                issued_at=datetime.now(),
-            )
+    st.divider()
 
-            st.success("Issue posted. Download the PDF record below.")
+    # --- show current cart ---
+    st.subheader("Issue list (will post all lines)")
+    if len(st.session_state.issue_cart) == 0:
+        st.info("No lines added yet. Add materials above.")
+    else:
+        df_cart = pd.DataFrame(st.session_state.issue_cart)[
+            ["MaterialCode", "MaterialName", "LocationCode", "Lot", "Qty", "UOM", "Notes"]
+        ]
+        st.dataframe(df_cart, use_container_width=True, hide_index=True)
 
-            st.download_button(
-                label="📄 Download Manual Issue Record (PDF)",
-                data=pdf_buf,
-                file_name=f"manual_issue_{material_code}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
-                mime="application/pdf",
-                use_container_width=True,
-            )
-   
+        issued_by = st.text_input("Issued By (name)", key="issue_by", value="")
+        header_notes = st.text_area("Header notes (optional)", key="issue_header_notes", value="")
 
+        # --- post all lines ---
+        if st.button("Post Issue (ALL lines)", type="primary", use_container_width=True):
+            # safety: prevent empty
+            if len(st.session_state.issue_cart) == 0:
+                st.error("Nothing to post.")
+                st.stop()
 
-if st.button("Issue Material (Manual)"):
-    pdf_buffer = generate_manual_issue_pdf(
-        material_rows=[
-            {
-                "MaterialCode": "OQ8154",
-                "MaterialName": "White (4906991 / 5504940)",
-                "LB": issued_lb,
-                "KG": issued_lb * 0.453592,
-            }
-        ],
-        location=location_code,
-        issued_by="Michael",
-        reason=st.session_state.get("issue_reason", "")
-    )
+            # post each line as a ledger txn
+            for line in st.session_state.issue_cart:
+                add_txn(
+                    line["MaterialID"],
+                    line["LocationID"],
+                    line["Lot"],
+                    "ISSUE",
+                    float(-line["Qty"]),          # negative for issue
+                    line["UOM"],
+                    (line["Notes"] or header_notes).strip()
+                )
 
-    st.download_button(
-        label="📄 Download Issue Record (PDF)",
-        data=pdf_buffer,
-        file_name=f"manual_issue_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
-        mime="application/pdf",
-    )
+            st.success(f"Posted {len(st.session_state.issue_cart)} issue line(s).")
 
-    st.success("Manual issue recorded. PDF generated.")
+            # OPTIONAL: generate ONE PDF for all lines
+            # If you already have a PDF generator, this is where you call it:
+            # pdf_buf = generate_multi_issue_pdf(lines=st.session_state.issue_cart, issued_by=issued_by, header_notes=header_notes)
+            # st.download_button("📄 Download Issue PDF", pdf_buf, f"manual_issue_{datetime.now():%Y%m%d_%H%M%S}.pdf", "application/pdf")
+
+            # reset cart after posting
+            st.session_state.issue_cart = []
+            st.rerun()
 
 # ---------------- ON HAND ----------------
 with tab3:
     st.subheader("On-Hand Report")
     st.dataframe(get_on_hand(), use_container_width=True)
     st.caption("On-hand = SUM of all receipts/issues (ledger method).")
+
 
 
 
