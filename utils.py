@@ -50,27 +50,4 @@ def generate_manual_issue_pdf(
     buffer.seek(0)
     return buffer
 
-if st.button("Issue Material (Manual)"):
-    pdf_buffer = generate_manual_issue_pdf(
-        material_rows=[
-            {
-                "MaterialCode": "OQ8154",
-                "MaterialName": "White (4906991 / 5504940)",
-                "LB": issued_lb,
-                "KG": issued_lb * 0.453592,
-            }
-        ],
-        location=location_code,
-        issued_by="Michael",
-        reason=st.session_state.get("issue_reason", "")
-    )
-
-    st.download_button(
-        label="📄 Download Issue Record (PDF)",
-        data=pdf_buffer,
-        file_name=f"manual_issue_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
-        mime="application/pdf",
-    )
-
-    st.success("Manual issue recorded. PDF generated.")
 
