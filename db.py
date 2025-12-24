@@ -71,10 +71,21 @@ def load_materials_from_csv(csv_path="MaterialMaster.csv"):
     conn.close()
 
 def get_materials():
-    conn = get_conn()
-    df = pd.read_sql("SELECT * FROM MaterialMaster ORDER BY MaterialCode", conn)
-    conn.close()
+    df = pd.read_sql_query(
+        """
+        SELECT
+            MaterialID,
+            MaterialCode,
+            MaterialName,
+            SapCode_Raw,
+            SapCode_Finished
+        FROM MaterialMaster
+        ORDER BY MaterialID
+        """,
+        conn,
+    )
     return df
+
 
 def get_locations():
     conn = get_conn()
