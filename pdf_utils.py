@@ -1,6 +1,12 @@
+from io import BytesIO
+from datetime import datetime
+
+from reportlab.lib.pagesizes import letter
 from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
+
+str(ln.get("Notes", "") or header_notes),
 
 
 def generate_multi_issue_pdf(
