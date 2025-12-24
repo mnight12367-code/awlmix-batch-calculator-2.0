@@ -146,6 +146,19 @@ with tab2:
             if len(st.session_state.issue_cart) == 0:
                 st.error("Nothing to post.")
                 st.stop()
+                st.session_state.last_issue_pdf = pdf_buf.getvalue()
+st.session_state.last_issue_pdf_name = f"manual_issue_{datetime.now():%Y%m%d_%H%M%S}.pdf"
+st.session_state.issue_cart = []
+st.rerun()
+if st.session_state.get("last_issue_pdf"):
+    st.download_button(
+        "📄 Download Issue Record (PDF)",
+        data=st.session_state.last_issue_pdf,
+        file_name=st.session_state.last_issue_pdf_name,
+        mime="application/pdf",
+    )
+
+                
 
             # post each line as a ledger txn
             for line in st.session_state.issue_cart:
@@ -175,6 +188,7 @@ with tab3:
     st.subheader("On-Hand Report")
     st.dataframe(get_on_hand(), use_container_width=True)
     st.caption("On-hand = SUM of all receipts/issues (ledger method).")
+
 
 
 
