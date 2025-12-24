@@ -1,6 +1,8 @@
 import streamlit as st
 import sys
 from pathlib import Path
+from datetime import datetime
+from pdf_utils import generate_manual_issue_pdf
 
 # Ensure repo root is on Python path (fixes ModuleNotFoundError on Streamlit Cloud)
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -122,4 +124,5 @@ with tab3:
     st.subheader("On-Hand Report")
     st.dataframe(get_on_hand(), use_container_width=True)
     st.caption("On-hand = SUM of all receipts/issues (ledger method).")
+
 
