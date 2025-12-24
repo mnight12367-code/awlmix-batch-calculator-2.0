@@ -1,6 +1,6 @@
 import streamlit as st
-import sys
 import pandas as pd
+import sys
 from pathlib import Path
 from datetime import datetime
 from pdf_utils import generate_manual_issue_pdf
@@ -173,6 +173,7 @@ with tab3:
     st.subheader("On-Hand Report")
     st.dataframe(get_on_hand(), use_container_width=True)
     st.caption("On-hand = SUM of all receipts/issues (ledger method).")
+
 
 
 
