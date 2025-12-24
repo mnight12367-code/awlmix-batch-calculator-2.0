@@ -16,13 +16,16 @@ def init_db():
     conn = get_conn()
     cur = conn.cursor()
 
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS MaterialMaster (
-        MaterialID INTEGER PRIMARY KEY AUTOINCREMENT,
-        MaterialCode TEXT UNIQUE,
-        MaterialName TEXT
-    );
-    """)
+cur.execute("""
+CREATE TABLE IF NOT EXISTS MaterialMaster (
+    MaterialID INTEGER PRIMARY KEY AUTOINCREMENT,
+    MaterialCode TEXT UNIQUE,
+    MaterialName TEXT,
+    SapCode_Raw TEXT,
+    SapCode_Finished TEXT
+);
+""")
+
 
     cur.execute("""
     CREATE TABLE IF NOT EXISTS Locations (
