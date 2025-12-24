@@ -261,10 +261,14 @@ with tab2:
 
             st.success(f"Posted {len(st.session_state.issue_cart)} issue line(s).")
 
-            # OPTIONAL: generate ONE PDF for all lines
-            # If you already have a PDF generator, this is where you call it:
-            # pdf_buf = generate_multi_issue_pdf(lines=st.session_state.issue_cart, issued_by=issued_by, header_notes=header_notes)
-            # st.download_button("📄 Download Issue PDF", pdf_buf, f"manual_issue_{datetime.now():%Y%m%d_%H%M%S}.pdf", "application/pdf")
+                   # 2) Optional: generate ONE PDF for all lines (stored for download after rerun)
+            pdf_buf = generate_multi_issue_pdf(
+                lines=st.session_state.receipt_cart,
+                issued_by=received_by.strip() or "Unknown",   # reusing field name
+                header_notes=header_notes.strip(),
+                issued_at=datetime.now(),
+            )
+
 
             # reset cart after posting
             st.session_state.issue_cart = []
@@ -275,6 +279,7 @@ with tab3:
     st.subheader("On-Hand Report")
     st.dataframe(get_on_hand(), use_container_width=True)
     st.caption("On-hand = SUM of all receipts/issues (ledger method).")
+
 
 
 
