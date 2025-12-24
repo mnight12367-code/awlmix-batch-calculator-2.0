@@ -86,13 +86,42 @@ with tab2:
     uom2 = st.selectbox("UOM", ["LB", "KG", "GAL", "EA"], key="issue_uom")
     notes2 = st.text_area("Notes (optional)", key="issue_notes", value="")
 
-    if st.button("Post Issue", type="primary"):
+    issued_by = st.text_input("Issued By (name)", key="issue_by", value="")
+
+    if st.button("Post Issue + Generate PDF", type="primary"):
         if qty2 <= 0:
             st.error("Quantity must be greater than 0.")
         else:
+            # Post transaction (negative quantity)
             add_txn(mat2, loc2, lot2.strip(), "ISSUE", float(-qty2), uom2, notes2.strip())
-            st.success("Issue posted.")
-            st.rerun()
+
+            # Look up codes/names for PDF
+            material_code = materials.loc[materials.MaterialID == mat2, "MaterialCode"].values[0]
+            material_name = materials.loc[materials.MaterialID == mat2, "MaterialName"].values[0]
+            location_code = locations.loc[locations.LocationID == loc2, "LocationCode"].values[0]
+
+            pdf_buf = generate_manual_issue_pdf(
+                material_code=material_code,
+                material_name=material_name,
+                location_code=location_code,
+                lot=lot2.strip(),
+                qty=float(qty2),
+                uom=uom2,
+                notes=notes2.strip(),
+                issued_by=issued_by.strip() or "Unknown",
+                issued_at=datetime.now(),
+            )
+
+            st.success("Issue posted. Download the PDF record below.")
+
+            st.download_button(
+                label="📄 Download Manual Issue Record (PDF)",
+                data=pdf_buf,
+                file_name=f"manual_issue_{material_code}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
+                mime="application/pdf",
+                use_container_width=True,
+            )
+   
 
 
 if st.button("Issue Material (Manual)"):
@@ -124,5 +153,6 @@ with tab3:
     st.subheader("On-Hand Report")
     st.dataframe(get_on_hand(), use_container_width=True)
     st.caption("On-hand = SUM of all receipts/issues (ledger method).")
+
 
 
