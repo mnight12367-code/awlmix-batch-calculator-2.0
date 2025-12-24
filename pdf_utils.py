@@ -6,8 +6,6 @@ from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
 
-str(ln.get("Notes", "") or header_notes),
-
 
 def generate_multi_issue_pdf(
     *,
@@ -25,7 +23,14 @@ def generate_multi_issue_pdf(
     issued_at = issued_at or datetime.now()
     buf = BytesIO()
 
-    doc = SimpleDocTemplate(buf, pagesize=letter, leftMargin=36, rightMargin=36, topMargin=36, bottomMargin=36)
+    doc = SimpleDocTemplate(
+        buf,
+        pagesize=letter,
+        leftMargin=36,
+        rightMargin=36,
+        topMargin=36,
+        bottomMargin=36,
+    )
     styles = getSampleStyleSheet()
 
     story = []
@@ -48,7 +53,7 @@ def generate_multi_issue_pdf(
             str(ln.get("Lot", "")),
             f"{float(ln.get('Qty', 0.0)):.4f}",
             str(ln.get("UOM", "")),
-            str(ln.get("Notes", "")),
+            str(ln.get("Notes", "") or header_notes),  # ✅ HERE
         ])
 
     table = Table(data, repeatRows=1, colWidths=[85, 150, 65, 70, 55, 40, 115])
