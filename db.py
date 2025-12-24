@@ -25,6 +25,13 @@ CREATE TABLE IF NOT EXISTS MaterialMaster (
     SapCode_Finished TEXT
 );
 """)
+# --- upgrade existing DB if table was created before SAP columns existed ---
+existing_cols = [row["name"] for row in cur.execute("PRAGMA table_info(MaterialMaster);").fetchall()]
+
+if "SapCode_Raw" not in existing_cols:
+    cur.execute("ALTER TABLE MaterialMaster ADD COLUMN SapCode_Raw TEXT;")
+if "SapCode_Finished" not in existing_cols:
+    cur.execute("ALTER TABLE MaterialMaster ADD COLUMN SapCode_Finished TEXT;")
 
 
     cur.execute("""
@@ -74,20 +81,26 @@ def load_materials_from_csv(csv_path="MaterialMaster.csv"):
     conn.close()
 
 def get_materials():
-    df = pd.read_sql_query(
-        """
-        SELECT
-            MaterialID,
-            MaterialCode,
-            MaterialName,
-            SapCode_Raw,
-            SapCode_Finished
-        FROM MaterialMaster
-        ORDER BY MaterialID
-        """,
-        conn,
-    )
-    return df
+    conn = get_conn()
+    try:
+        df = pd.read_sql_query(
+            """
+            SELECT
+                MaterialID,
+                MaterialCode,
+                MaterialName,
+                SapCode_Raw,
+                SapCode_Finished
+            FROM MaterialMaster
+            ORDER BY MaterialID
+            """,
+            conn,
+        )
+        return df
+    finally:
+        conn.close()
+
+        
 
 
 def get_locations():
