@@ -166,9 +166,14 @@ with tab1:
 with tab2:
     st.subheader("Issue Material (Manual) — Multiple Materials")
 
-    # --- session cart ---
+    # --- session state ---
     if "issue_cart" not in st.session_state:
         st.session_state.issue_cart = []
+
+    if "last_issue_pdf" not in st.session_state:
+        st.session_state.last_issue_pdf = None
+    if "last_issue_pdf_name" not in st.session_state:
+        st.session_state.last_issue_pdf_name = ""
 
     # --- pick ONE line to add ---
     mat2 = st.selectbox(
@@ -229,56 +234,75 @@ with tab2:
         st.info("No lines added yet. Add materials above.")
     else:
         df_cart = pd.DataFrame(st.session_state.issue_cart)[
-    ["MaterialCode", "MaterialName", "LocationCode", "Lot", "Qty", "UOM", "Notes"]
-]
-
+            ["MaterialCode", "MaterialName", "LocationCode", "Lot", "Qty", "UOM", "Notes"]
+        ]
         st.dataframe(df_cart, width="stretch", hide_index=True)
-
 
         issued_by = st.text_input("Issued By (name)", key="issue_by", value="")
         header_notes = st.text_area("Header notes (optional)", key="issue_header_notes", value="")
 
-        # --- post all lines ---
-        if st.button("Post Issue (ALL lines)", type="primary", use_container_width=True):
-            # safety: prevent empty
+        if st.button("Post Issue (ALL lines)", type="primary"):
+            # Safety
             if len(st.session_state.issue_cart) == 0:
                 st.error("Nothing to post.")
                 st.stop()
-                st.session_state.last_issue_pdf = pdf_buf.getvalue()
-                
 
-            # post each line as a ledger txn
-            for line in st.session_state.issue_cart:
+            # IMPORTANT: copy cart NOW so PDF uses the same lines even after we clear it
+            lines_for_pdf = list(st.session_state.issue_cart)
+
+            # 1) Post each line (negative qty)
+            for line in lines_for_pdf:
                 add_txn(
                     line["MaterialID"],
                     line["LocationID"],
                     line["Lot"],
                     "ISSUE",
-                    float(-line["Qty"]),          # negative for issue
+                    float(-line["Qty"]),
                     line["UOM"],
                     (line["Notes"] or header_notes).strip()
                 )
 
-            st.success(f"Posted {len(st.session_state.issue_cart)} issue line(s).")
-
-                   # 2) Optional: generate ONE PDF for all lines (stored for download after rerun)
+            # 2) Generate ONE PDF for all lines
             pdf_buf = generate_multi_issue_pdf(
-                lines=st.session_state.receipt_cart,
-                issued_by=received_by.strip() or "Unknown",   # reusing field name
+                lines=lines_for_pdf,
+                issued_by=issued_by.strip() or "Unknown",
                 header_notes=header_notes.strip(),
                 issued_at=datetime.now(),
             )
 
+            # 3) Save PDF bytes so download works AFTER rerun
+            st.session_state.last_issue_pdf = pdf_buf.getvalue()
+            st.session_state.last_issue_pdf_name = f"manual_issue_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
 
-            # reset cart after posting
+            st.success(f"Posted {len(lines_for_pdf)} issue line(s). PDF ready below.")
+
+            # Clear cart
             st.session_state.issue_cart = []
             st.rerun()
+
+    # --- Download last Issue PDF (after rerun) ---
+    if st.session_state.last_issue_pdf:
+        st.divider()
+        st.subheader("Last posted issue PDF")
+        st.download_button(
+            label="📄 Download Issue Record (PDF)",
+            data=st.session_state.last_issue_pdf,
+            file_name=st.session_state.last_issue_pdf_name or "manual_issue.pdf",
+            mime="application/pdf",
+            use_container_width=True,
+        )
+        if st.button("Clear last Issue PDF"):
+            st.session_state.last_issue_pdf = None
+            st.session_state.last_issue_pdf_name = ""
+            st.rerun()
+
 
 # ---------------- ON HAND ----------------
 with tab3:
     st.subheader("On-Hand Report")
     st.dataframe(get_on_hand(), use_container_width=True)
     st.caption("On-hand = SUM of all receipts/issues (ledger method).")
+
 
 
 
