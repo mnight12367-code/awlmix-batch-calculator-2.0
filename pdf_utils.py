@@ -44,13 +44,12 @@ def generate_multi_issue_pdf(
         story.append(Paragraph(f"<b>Header Notes:</b> {header_notes.strip()}", styles["Normal"]))
     story.append(Spacer(1, 12))
 
-    data = [["MaterialCode", "MaterialName", "Location", "Lot", "Qty", "UOM", "Notes"]]
+    data = [["MaterialCode", "MaterialName", "Location","Qty", "UOM", "Notes"]]
     for ln in lines:
         data.append([
             str(ln.get("MaterialCode", "")),
             str(ln.get("MaterialName", "")),
             str(ln.get("LocationCode", "")),
-            str(ln.get("Lot", "")),
             f"{float(ln.get('Qty', 0.0)):.4f}",
             str(ln.get("UOM", "")),
             str(ln.get("Notes", "") or header_notes),
