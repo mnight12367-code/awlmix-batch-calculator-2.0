@@ -130,10 +130,12 @@ with tab2:
     if len(st.session_state.issue_cart) == 0:
         st.info("No lines added yet. Add materials above.")
     else:
-        df_cart = pdf.DataFrame(st.session_state.issue_cart)[
-            ["MaterialCode", "MaterialName", "LocationCode", "Lot", "Qty", "UOM", "Notes"]
-        ]
-        st.dataframe(df_cart, use_container_width=True, hide_index=True)
+        df_cart = pd.DataFrame(st.session_state.issue_cart)[
+    ["MaterialCode", "MaterialName", "LocationCode", "Lot", "Qty", "UOM", "Notes"]
+]
+
+        st.dataframe(df_cart, width="stretch", hide_index=True)
+
 
         issued_by = st.text_input("Issued By (name)", key="issue_by", value="")
         header_notes = st.text_area("Header notes (optional)", key="issue_header_notes", value="")
@@ -173,6 +175,7 @@ with tab3:
     st.subheader("On-Hand Report")
     st.dataframe(get_on_hand(), use_container_width=True)
     st.caption("On-hand = SUM of all receipts/issues (ledger method).")
+
 
 
 
