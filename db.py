@@ -94,11 +94,12 @@ def get_materials():
             FROM MaterialMaster
             ORDER BY MaterialID
             """,
-            conn,
+            conn
         )
         return df
     finally:
         conn.close()
+
 
         
 
