@@ -1,29 +1,25 @@
-import sqlite3
-from pathlib import Path
-import shutil
-from datetime import datetime
-import pandas as pd
-
 import os
 import sqlite3
-from pathlib import Path
 import shutil
+from pathlib import Path
+from datetime import datetime
+
+import pandas as pd
 
 ROOT_DIR = Path(__file__).resolve().parent
 REPO_DB = ROOT_DIR / "awlmix.db"
 
-def _is_windows():
+def _is_windows() -> bool:
     return os.name == "nt"
 
 def _default_db_path() -> Path:
-    # ✅ Laptop (Windows) persistent location
+    # ✅ Windows laptop persistent location
     if _is_windows():
         data_dir = Path(r"C:\AWLMIXdata")
         data_dir.mkdir(parents=True, exist_ok=True)
         return data_dir / "awlmix.db"
 
-    # ✅ Linux/Mac local: store in project folder "data/"
-    # (change if you want)
+    # ✅ Mac/Linux local persistent location
     data_dir = ROOT_DIR / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
     return data_dir / "awlmix.db"
@@ -31,11 +27,8 @@ def _default_db_path() -> Path:
 DB_PATH = Path(os.environ.get("AWLMIX_DB_PATH", str(_default_db_path())))
 
 def ensure_db():
-    """
-    If DB doesn't exist yet, seed it from the packaged repo DB (optional).
-    """
+    """Seed DB from repo copy if persistent DB doesn't exist yet."""
     if not DB_PATH.exists():
-        # Ensure parent folder exists
         DB_PATH.parent.mkdir(parents=True, exist_ok=True)
         if REPO_DB.exists():
             shutil.copy2(REPO_DB, DB_PATH)
@@ -46,6 +39,7 @@ def get_conn():
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON;")
     return conn
+
 
 
 
