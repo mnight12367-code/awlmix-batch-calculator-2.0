@@ -194,6 +194,9 @@ wt_rows = wt.loc[wt["ProductID"] == product_id].copy()
 if wt_rows.empty:
     st.error("No weight targets found for this ProductID in ProductWeightTargets.txt")
     st.stop()
+# DEBUG: show available unit types for this product   
+st.write(wt_rows[["ProductID", "UnitType"]])
+ 
 
 unit_options = sorted(
     wt_rows["UnitType"]
@@ -314,4 +317,5 @@ st.dataframe(
     use_container_width=True,
     hide_index=True
 )
+
 
