@@ -280,10 +280,25 @@ with tab2:
 # ---------------- ON HAND ----------------
 with tab3:
     st.subheader("On-Hand Report")
-    st.dataframe(get_on_hand(), use_container_width=True)
+
+    onhand = get_on_hand()
+
+    st.dataframe(onhand, use_container_width=True, hide_index=True)
     st.caption("On-hand = SUM of all receipts/issues (ledger method).")
 
+    # --- End-of-day export ---
+    csv_bytes = onhand.to_csv(index=False).encode("utf-8")
+    st.download_button(
+        label="⬇️ Download On-Hand (CSV)",
+        data=csv_bytes,
+        file_name=f"on_hand_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+        mime="text/csv",
+        use_container_width=True,
+    )
+
+
    
+
 
 
 
