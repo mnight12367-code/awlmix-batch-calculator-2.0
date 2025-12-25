@@ -36,21 +36,20 @@ WEIGHT_TARGETS_PATH = ROOT_DIR / "ProductWeightTargets.txt"
 # Load TXT (CSV) files
 # ----------------------------
 @st.cache_data
-def load_product_master(path: Path) -> pd.DataFrame:
+def load_product_master(path: Path, mtime: float) -> pd.DataFrame:
     if not path.exists():
         return pd.DataFrame()
-    df = pd.read_csv(path)
-    # Expected: ProductID, ProductCode, ProductName
-    return df
+    return pd.read_csv(path)
 
 @st.cache_data
-def load_weight_targets(path: Path) -> pd.DataFrame:
+def load_weight_targets(path: Path, mtime: float) -> pd.DataFrame:
     if not path.exists():
         return pd.DataFrame()
-    df = pd.read_csv(path)
-    # Expected:
-    # ProductID, ProductUnits, UnitType, TotalWeightPerUnitLB, TotalWeightPerUnitG
-    return df
+    return pd.read_csv(path)
+
+pm = load_product_master(PRODUCT_MASTER_PATH, PRODUCT_MASTER_PATH.stat().st_mtime)
+wt = load_weight_targets(WEIGHT_TARGETS_PATH, WEIGHT_TARGETS_PATH.stat().st_mtime)
+
 
 def ensure_production_batch_table():
     conn = get_conn()
@@ -317,5 +316,6 @@ st.dataframe(
     use_container_width=True,
     hide_index=True
 )
+
 
 
