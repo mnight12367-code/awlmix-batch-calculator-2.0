@@ -146,10 +146,7 @@ def get_recent_batches(limit: int = 50) -> pd.DataFrame:
 # ----------------------------
 # Init
 # ----------------------------
-ensure_production_batch_table()
 
-pm = load_product_master(PRODUCT_MASTER_PATH)
-wt = load_weight_targets(WEIGHT_TARGETS_PATH)
 
 if pm.empty:
     st.error(f"ProductMaster.txt not found or empty: {PRODUCT_MASTER_PATH}")
@@ -319,6 +316,7 @@ st.dataframe(
     use_container_width=True,
     hide_index=True
 )
+
 
 
 
