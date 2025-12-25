@@ -1,17 +1,29 @@
 import sqlite3
 from pathlib import Path
+import shutil
 from datetime import datetime
 import pandas as pd
 
-DB_PATH = Path(__file__).parent / "awlmix.db"
+ROOT_DIR = Path(__file__).resolve().parent
+REPO_DB = ROOT_DIR / "awlmix.db"
 
+RUNTIME_DIR = Path("/tmp") / "awlmix"
+RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
+DB_PATH = RUNTIME_DIR / "awlmix.db"
+
+def ensure_db():
+    # Copy packaged DB into writable runtime location if not present yet
+    if not DB_PATH.exists():
+        if REPO_DB.exists():
+            shutil.copy2(REPO_DB, DB_PATH)
 
 def get_conn():
+    ensure_db()
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON;")
-    conn.execute("PRAGMA journal_mode = WAL;")
     return conn
+
 
 
 def init_db():
