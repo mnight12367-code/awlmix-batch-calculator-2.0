@@ -33,14 +33,15 @@ Select a tool from the sidebar to get started:
 
 - **Production Batch**  
   Create and track production batches from **PRE-BATCH** through **READY TO SHIP**.
-
+- **This tool is intended for use during AWLMIX office hours 5 am to 5 pm.**
 ---
-    ("This tool is intended for use during AWLMIX office hours 5 am to 5 pm. ")
+
 
 🛠️ **Built for real manufacturing operations**  
 Variant-aware units • Ledger-based inventory • BOM-driven feasibility • Batch traceability
 """)
- ("This tool is intended for use during AWLMIX office hours 5 am to 5 pm. ")
+
+
 
 
 
