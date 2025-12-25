@@ -1,15 +1,6 @@
 import streamlit as st
 import pandas as pd
 import sys
-import os
-import streamlit as st
-
-DEBUG = os.getenv("DEBUG", "0") == "1"
-
-if DEBUG:
-    # your st.write(...) debug block here
-    ...
-
 from pathlib import Path
 from datetime import datetime
 
@@ -23,27 +14,6 @@ if str(ROOT_DIR) not in sys.path:
 from db import get_materials, get_locations, add_txn, get_on_hand
 
 st.title("Inventory")
-import streamlit as st
-import sqlite3
-from pathlib import Path
-
-st.write("cwd:", Path.cwd())
-st.write("__file__:", Path(__file__).resolve())
-
-# If you keep the DB in the repo, point to it explicitly:
-DB_PATH = Path(__file__).resolve().parents[1] / "awlmix.db"   # <-- adjust name if different
-st.write("DB_PATH:", DB_PATH)
-st.write("DB exists:", DB_PATH.exists(), "size:", DB_PATH.stat().st_size if DB_PATH.exists() else None)
-
-try:
-    conn = sqlite3.connect(DB_PATH)
-    tables = conn.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;").fetchall()
-    st.write("Tables:", tables)
-    conn.close()
-except Exception as e:
-    st.exception(e)
-    st.stop()
-
 
 materials = get_materials()
 locations = get_locations()
@@ -314,6 +284,13 @@ with tab3:
     st.caption("On-hand = SUM of all receipts/issues (ledger method).")
 
    
+
+
+
+
+
+
+
 
 
 
