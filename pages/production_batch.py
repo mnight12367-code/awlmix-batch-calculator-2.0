@@ -160,7 +160,16 @@ if wt.empty:
 # Ensure types
 pm["ProductID"] = pm["ProductID"].astype(int)
 wt["ProductID"] = wt["ProductID"].astype(int)
-wt["UnitType"] = wt["UnitType"].astype(str)
+
+# Normalize UnitType so GLUS/QTUS behave correctly
+wt["UnitType"] = (
+    wt["UnitType"]
+    .astype(str)
+    .str.replace('"', '', regex=False)
+    .str.strip()
+    .str.upper()
+)
+
 
 # ----------------------------
 # Create Batch
@@ -186,13 +195,24 @@ if wt_rows.empty:
     st.error("No weight targets found for this ProductID in ProductWeightTargets.txt")
     st.stop()
 
-unit_options = wt_rows["UnitType"].tolist()
+unit_options = sorted(
+    wt_rows["UnitType"]
+    .dropna()
+    .astype(str)
+    .str.replace('"', '', regex=False)
+    .str.strip()
+    .str.upper()
+    .unique()
+    .tolist()
+)
 
-# Default to GLUS if available, else first option
 default_idx = unit_options.index("GLUS") if "GLUS" in unit_options else 0
 unit_type = st.selectbox("UnitType", unit_options, index=default_idx)
 
-row_u = wt_rows.loc[wt_rows["UnitType"] == unit_type].iloc[0]
+row_u = wt_rows.loc[
+    wt_rows["UnitType"].astype(str).str.strip().str.upper() == unit_type
+].iloc[0]
+
 target_lb_per_unit = float(row_u.get("TotalWeightPerUnitLB", 0.0) or 0.0)
 target_g_per_unit = float(row_u.get("TotalWeightPerUnitG", 0.0) or 0.0)
 
@@ -294,3 +314,4 @@ st.dataframe(
     use_container_width=True,
     hide_index=True
 )
+
