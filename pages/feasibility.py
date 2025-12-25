@@ -137,10 +137,12 @@ if MATERIAL_MASTER_CSV.exists():
 require_columns(prod_df, ["ProductID", "ProductCode", "ProductName"], "ProductMaster.txt")
 require_columns(bom_df, ["ProductID", "MaterialCode", "Percent"], "ProductMaterialUsage.txt")
 require_columns(
+require_columns(
     wt_df,
-    ["ProductID", "TotalWeightPerUnitLB", "TotalWeightPerUnitG"],
+    ["ProductID", "ProductUnits", "UnitType", "TotalWeightPerUnitLB", "TotalWeightPerUnitG"],
     "ProductWeightTargets.txt"
 )
+
 
 # ---------- UI ----------
 # ---------- UI ----------
@@ -257,6 +259,7 @@ if fails == 0:
 else:
     st.error(f"❌ NOT FEASIBLE: {fails} material(s) are short. See Shortage column.")
     st.caption("Tip: Receive inventory for the missing materials, or reduce units.")
+
 
 
 
