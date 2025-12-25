@@ -47,8 +47,11 @@ def load_weight_targets(path: Path, mtime: float) -> pd.DataFrame:
         return pd.DataFrame()
     return pd.read_csv(path)
 
-pm = load_product_master(PRODUCT_MASTER_PATH, PRODUCT_MASTER_PATH.stat().st_mtime)
-wt = load_weight_targets(WEIGHT_TARGETS_PATH, WEIGHT_TARGETS_PATH.stat().st_mtime)
+pm_mtime = PRODUCT_MASTER_PATH.stat().st_mtime if PRODUCT_MASTER_PATH.exists() else 0
+wt_mtime = WEIGHT_TARGETS_PATH.stat().st_mtime if WEIGHT_TARGETS_PATH.exists() else 0
+
+pm = load_product_master(PRODUCT_MASTER_PATH, pm_mtime)
+wt = load_weight_targets(WEIGHT_TARGETS_PATH, wt_mtime)
 
 
 def ensure_production_batch_table():
@@ -316,6 +319,7 @@ st.dataframe(
     use_container_width=True,
     hide_index=True
 )
+
 
 
 
