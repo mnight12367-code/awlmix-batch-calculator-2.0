@@ -3,11 +3,10 @@ import sys
 from pathlib import Path
 import pandas as pd
 
-def read_csv_debug(path):
+def read_csv_flexible_silent(path: Path) -> pd.DataFrame:
     seps = [",", "\t", "|", ";"]
-    best = None
+    best_df = None
     best_cols = 0
-    best_sep = None
     last_err = None
 
     for sep in seps:
@@ -18,21 +17,25 @@ def read_csv_debug(path):
                 engine="python",
                 dtype=str,
                 keep_default_na=False,
-                on_bad_lines="skip",   # keeps the app alive
+                on_bad_lines="skip",
             )
             if df.shape[1] > best_cols:
-                best = df
+                best_df = df
                 best_cols = df.shape[1]
-                best_sep = sep
         except Exception as e:
             last_err = e
 
-    if best is None:
+    if best_df is None:
         raise last_err
 
-    st.caption(f"Parsed {path.name} using delimiter {repr(best_sep)} → {best.shape[1]} columns, {len(best)} rows")
-    st.write("Columns:", list(best.columns))
-    return best
+    best_df.columns = (
+        pd.Index(best_df.columns)
+        .astype(str)
+        .str.replace("\ufeff", "", regex=False)
+        .str.strip()
+    )
+    return best_df
+
 
 
 # Streamlit Cloud safe import
@@ -85,21 +88,11 @@ def require_columns(df: pd.DataFrame, required: list, filename: str):
         st.stop()
 
 
-
-bom_df = read_csv_debug(BOM_PATH)
-
-bom_df.columns = (
-    pd.Index(bom_df.columns)
-    .astype(str)
-    .str.replace("\ufeff", "", regex=False)
-    .str.strip()
-)
-
-
 # ---------- Load tables ----------
-prod_df = read_csv_debug(PRODUCT_MASTER_PATH)
-wt_df   = read_csv_debug(WEIGHT_TARGETS_PATH)
-bom_df  = read_csv_debug(BOM_PATH)
+prod_df = read_csv_flexible_silent(PRODUCT_MASTER_PATH)
+wt_df   = read_csv_flexible_silent(WEIGHT_TARGETS_PATH)
+bom_df  = read_csv_flexible_silent(BOM_PATH)
+
 
 # normalize column names
 for df in (prod_df, wt_df, bom_df):
@@ -135,7 +128,7 @@ if MATERIAL_MASTER_CSV.exists():
             .to_dict()
         )
 
-    st.caption(f"Loaded MaterialMaster.csv → {len(mat_id_to_code)} material mappings")
+    #st.caption(f"Loaded MaterialMaster.csv → {len(mat_id_to_code)} material mappings")
 
 
 # ---------- Validate schema ----------
@@ -232,6 +225,7 @@ if fails == 0:
 else:
     st.error(f"❌ NOT FEASIBLE: {fails} material(s) are short. See Shortage column.")
     st.caption("Tip: Receive inventory for the missing materials, or reduce units.")
+
 
 
 
