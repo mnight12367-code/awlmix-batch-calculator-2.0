@@ -1,6 +1,4 @@
 import streamlit as st
-st.write("Inventory page version: 2025-12-25 A")
-import streamlit as st
 import pandas as pd
 import sys
 from pathlib import Path
@@ -286,6 +284,7 @@ with tab3:
     st.caption("On-hand = SUM of all receipts/issues (ledger method).")
 
    
+
 
 
 
