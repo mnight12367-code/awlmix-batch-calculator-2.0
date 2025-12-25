@@ -1,3 +1,5 @@
+import os
+DEBUG = os.getenv("DEBUG", "0") == "1"
 import streamlit as st
 import sys
 from pathlib import Path
@@ -225,6 +227,7 @@ if fails == 0:
 else:
     st.error(f"❌ NOT FEASIBLE: {fails} material(s) are short. See Shortage column.")
     st.caption("Tip: Receive inventory for the missing materials, or reduce units.")
+
 
 
 
