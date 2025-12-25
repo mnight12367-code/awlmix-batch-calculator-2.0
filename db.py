@@ -4,16 +4,39 @@ import shutil
 from datetime import datetime
 import pandas as pd
 
+import os
+import sqlite3
+from pathlib import Path
+import shutil
+
 ROOT_DIR = Path(__file__).resolve().parent
 REPO_DB = ROOT_DIR / "awlmix.db"
 
-RUNTIME_DIR = Path("/tmp") / "awlmix"
-RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
-DB_PATH = RUNTIME_DIR / "awlmix.db"
+def _is_windows():
+    return os.name == "nt"
+
+def _default_db_path() -> Path:
+    # ✅ Laptop (Windows) persistent location
+    if _is_windows():
+        data_dir = Path(r"C:\AWLMIXdata")
+        data_dir.mkdir(parents=True, exist_ok=True)
+        return data_dir / "awlmix.db"
+
+    # ✅ Linux/Mac local: store in project folder "data/"
+    # (change if you want)
+    data_dir = ROOT_DIR / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    return data_dir / "awlmix.db"
+
+DB_PATH = Path(os.environ.get("AWLMIX_DB_PATH", str(_default_db_path())))
 
 def ensure_db():
-    # Copy packaged DB into writable runtime location if not present yet
+    """
+    If DB doesn't exist yet, seed it from the packaged repo DB (optional).
+    """
     if not DB_PATH.exists():
+        # Ensure parent folder exists
+        DB_PATH.parent.mkdir(parents=True, exist_ok=True)
         if REPO_DB.exists():
             shutil.copy2(REPO_DB, DB_PATH)
 
