@@ -1,15 +1,15 @@
 import streamlit as st
 from db import init_db, load_materials_from_csv
 
-# --- Initialize database ---
-init_db()
-load_materials_from_csv()
-
-# --- Page config ---
+# --- Page config (must be first Streamlit call) ---
 st.set_page_config(
     page_title="AWLMIX Operations Tools",
     layout="wide"
 )
+
+# --- Initialize database ---
+init_db()
+load_materials_from_csv()
 
 st.title("AWLMIX Operations Tools")
 st.caption("Manufacturing • Inventory • Feasibility • Batch Control")
@@ -36,18 +36,11 @@ Select a tool from the sidebar to get started:
 
 ---
 
-
 🛠️ **Built for real manufacturing operations**  
 Variant-aware units • Ledger-based inventory • BOM-driven feasibility • Batch traceability
-"""
+""")  # ✅ THIS was missing
+
 st.warning(
     "This tool is intended for use during AWLMIX office hours 5 am to 5 pm. "
     "Inventory resets outside active sessions; use End-of-Day export for recordkeeping."
 )
-
-
-
-
-
-
-
