@@ -5,6 +5,15 @@ from pathlib import Path
 from datetime import datetime
 
 from pdf_utils import generate_multi_issue_pdf
+import os
+import streamlit as st
+
+DEBUG = os.getenv("DEBUG", "0") == "1"
+
+if DEBUG:
+    # your st.write(...) debug block here
+    ...
+
 
 # Ensure repo root is on Python path (fixes ModuleNotFoundError on Streamlit Cloud)
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -305,6 +314,7 @@ with tab3:
     st.caption("On-hand = SUM of all receipts/issues (ledger method).")
 
    
+
 
 
 
