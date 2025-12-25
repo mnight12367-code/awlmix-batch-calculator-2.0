@@ -143,13 +143,43 @@ require_columns(
 )
 
 # ---------- UI ----------
-prod_df = prod_df.copy()
-prod_df["__label"] = prod_df["ProductCode"].astype(str) + " - " + prod_df["ProductName"].astype(str)
+# ---------- UI ----------
+# Build a selectable list based on WeightTargets so GLUS/QTUS appear separately
+prod_df2 = prod_df.copy()
+wt_df2 = wt_df.copy()
 
-product_label = st.selectbox("Product", prod_df["__label"].tolist())
-sel = prod_df.loc[prod_df["__label"] == product_label].iloc[0]
-product_id = str(sel["ProductID"])
-product_code = str(sel["ProductCode"])
+# normalize types/whitespace
+prod_df2["ProductID"] = prod_df2["ProductID"].astype(str).str.strip()
+wt_df2["ProductID"] = wt_df2["ProductID"].astype(str).str.strip()
+wt_df2["UnitType"] = wt_df2["UnitType"].astype(str).str.strip()
+wt_df2["ProductUnits"] = wt_df2["ProductUnits"].astype(str).str.strip()
+
+pick_df = wt_df2.merge(
+    prod_df2[["ProductID", "ProductCode", "ProductName"]],
+    on="ProductID",
+    how="left"
+)
+
+# create unique label including GLUS/QTUS
+pick_df["__label"] = (
+    pick_df["ProductCode"].astype(str).str.strip()
+    + " - "
+    + pick_df["ProductName"].astype(str).str.strip()
+    + " ("
+    + pick_df["UnitType"].astype(str).str.strip()
+    + ")"
+)
+
+pick_df = pick_df.sort_values(["ProductCode", "UnitType"])
+
+product_label = st.selectbox("Product", pick_df["__label"].tolist())
+
+sel = pick_df.loc[pick_df["__label"] == product_label].iloc[0]
+
+product_id = str(sel["ProductID"]).strip()
+product_code = str(sel["ProductCode"]).strip()
+unit_type = str(sel["UnitType"]).strip()
+
 
 c1, c2, c3 = st.columns(3)
 with c1:
@@ -160,7 +190,7 @@ with c3:
     compare_uom = st.selectbox("Inventory UOM", ["LB"], index=0)  # lock to LB for now
 
 # ---------- Weight target ----------
-wt_match = wt_df.loc[wt_df["ProductID"].astype(str) == product_id]
+wt_match = wt_df.loc[     (wt_df["ProductID"].astype(str).str.strip() == product_id)     & (wt_df["UnitType"].astype(str).str.strip() == unit_type) ]
 if wt_match.empty:
     st.error(f"No weight target found for ProductID {product_id} ({product_code}).")
     st.stop()
@@ -227,6 +257,7 @@ if fails == 0:
 else:
     st.error(f"❌ NOT FEASIBLE: {fails} material(s) are short. See Shortage column.")
     st.caption("Tip: Receive inventory for the missing materials, or reduce units.")
+
 
 
 
