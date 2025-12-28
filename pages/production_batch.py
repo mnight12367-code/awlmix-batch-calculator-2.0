@@ -54,8 +54,7 @@ pm = load_product_master(PRODUCT_MASTER_PATH, pm_mtime)
 wt = load_weight_targets(WEIGHT_TARGETS_PATH, wt_mtime)
 
 
-def ensure_production_batch_table():
-    ensure_production_batch_table()   
+def ensure_production_batch_table():  
     conn = get_conn()
     cur = conn.cursor()
     cur.execute("""
@@ -319,6 +318,7 @@ st.dataframe(
     use_container_width=True,
     hide_index=True
 )
+
 
 
 
