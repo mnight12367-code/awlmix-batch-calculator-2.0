@@ -145,6 +145,12 @@ def get_recent_batches(limit: int = 50) -> pd.DataFrame:
 
 
 # ----------------------------
+# Init  ✅ (NO INDENTATION)
+# ----------------------------
+ensure_production_batch_table()
+
+
+# ----------------------------
 # Init
 # ----------------------------
 ensure_production_batch_table()
@@ -318,6 +324,7 @@ st.dataframe(
     use_container_width=True,
     hide_index=True
 )
+
 
 
 
