@@ -3,7 +3,7 @@ import pandas as pd
 from pathlib import Path
 from datetime import datetime
 import sys
-st.write("Loaded production_batch.py version:", __file__)
+
 # Ensure repo root on path
 ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
@@ -313,6 +313,7 @@ st.dataframe(
     use_container_width=True,
     hide_index=True
 )
+
 
 
 
