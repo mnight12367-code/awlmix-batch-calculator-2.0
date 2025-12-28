@@ -54,7 +54,7 @@ pm = load_product_master(PRODUCT_MASTER_PATH, pm_mtime)
 wt = load_weight_targets(WEIGHT_TARGETS_PATH, wt_mtime)
 
 
-def ensure_production_batch_table():  
+def ensure_production_batch_table():
     conn = get_conn()
     cur = conn.cursor()
     cur.execute("""
@@ -144,10 +144,15 @@ def get_recent_batches(limit: int = 50) -> pd.DataFrame:
 
 
 # ----------------------------
-# Init  ✅ (NO INDENTATION)
+# Init
 # ----------------------------
 ensure_production_batch_table()
 
+
+
+# ----------------------------
+# Init
+# ----------------------------
 
 
 if pm.empty:
@@ -196,7 +201,7 @@ if wt_rows.empty:
     st.error("No weight targets found for this ProductID in ProductWeightTargets.txt")
     st.stop()
 # DEBUG: show available unit types for this product   
-#st.write(wt_rows[["ProductID", "UnitType"]])
+st.write(wt_rows[["ProductID", "UnitType"]])
  
 
 unit_options = sorted(
@@ -318,13 +323,6 @@ st.dataframe(
     use_container_width=True,
     hide_index=True
 )
-
-
-
-
-
-
-
 
 
 
