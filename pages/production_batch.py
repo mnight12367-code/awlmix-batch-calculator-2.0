@@ -147,6 +147,7 @@ def get_recent_batches(limit: int = 50) -> pd.DataFrame:
 # ----------------------------
 # Init
 # ----------------------------
+ensure_production_batch_table()
 
 
 if pm.empty:
@@ -317,6 +318,7 @@ st.dataframe(
     use_container_width=True,
     hide_index=True
 )
+
 
 
 
