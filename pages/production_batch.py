@@ -150,11 +150,6 @@ def get_recent_batches(limit: int = 50) -> pd.DataFrame:
 ensure_production_batch_table()
 
 
-# ----------------------------
-# Init
-# ----------------------------
-ensure_production_batch_table()
-
 
 if pm.empty:
     st.error(f"ProductMaster.txt not found or empty: {PRODUCT_MASTER_PATH}")
@@ -324,6 +319,7 @@ st.dataframe(
     use_container_width=True,
     hide_index=True
 )
+
 
 
 
