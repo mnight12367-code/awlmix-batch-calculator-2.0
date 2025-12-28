@@ -65,19 +65,14 @@ def ensure_production_batch_table():
         ProductCode TEXT,
         ProductName TEXT,
         UnitType TEXT,
-
         QtyUnits REAL,
-
         TargetPerUnitLB REAL,
         TargetPerUnitG REAL,
         TotalTargetLB REAL,
         TotalTargetG REAL,
-
         Status TEXT,
-
         Customer TEXT,
         Notes TEXT,
-
         CreatedAt TEXT,
         CreatedBy TEXT,
         UpdatedAt TEXT,
@@ -86,6 +81,7 @@ def ensure_production_batch_table():
     """)
     conn.commit()
     conn.close()
+
 
 def insert_batch(record: dict):
     conn = get_conn()
@@ -146,7 +142,7 @@ def get_recent_batches(limit: int = 50) -> pd.DataFrame:
 # ----------------------------
 # Init
 # ----------------------------
-ensure_production_batch_table()
+
 
 
 if pm.empty:
@@ -317,6 +313,7 @@ st.dataframe(
     use_container_width=True,
     hide_index=True
 )
+
 
 
 
